@@ -1,0 +1,29 @@
+{
+  "name": "degiro-portfolio",
+  "version": "1.0.0",
+  "description": "Dependency-free DEGIRO Transactions CSV portfolio and EUR weighted-average cost basis calculator.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "bin": {
+    "degiro-portfolio": "bin/degiro-portfolio.js"
+  },
+  "exports": "./src/index.js",
+  "scripts": {
+    "start": "node bin/degiro-portfolio.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:coverage": "node --test --experimental-test-coverage \"test/*.test.js\""
+  },
+  "keywords": ["degiro", "portfolio", "csv", "eur", "cost-basis"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wirrike/degiro-portfolio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wirrike/degiro-portfolio/issues"
+  },
+  "homepage": "https://github.com/wirrike/degiro-portfolio#readme"
+}

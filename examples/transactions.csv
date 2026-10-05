@@ -1,0 +1,15 @@
+Date,Time,Product,ISIN,Reference exchange,Venue,Quantity,Price,,Local value,,Value EUR,Exchange rate,AutoFX Fee,Transaction and/or third party fees EUR,Total EUR,Order ID
+12-06-2024,00:00,Demo Renamed,US0000000001,DEG,,15,"0,00",EUR,"0,00",EUR,"0,00",,"0,00",,"0,00",
+12-06-2024,00:00,Demo Equity,US0000000001,DEG,,-15,"0,00",EUR,"0,00",EUR,"0,00",,"0,00",,"0,00",
+11-06-2024,10:00,Demo Equity,US0000000001,DEMO,XDEM,-5,"20,00",EUR,"100,00",EUR,"100,00",,"0,00","-1,00","99,00",demo-sale-2
+10-06-2024,00:00,Demo Equity,US0000000001,DEMO,,20,"30,00",EUR,"-600,00",EUR,"-600,00",,"0,00",,"-600,00",
+10-06-2024,00:00,Demo Equity,US0000000001,DEMO,,-2,"300,00",EUR,"600,00",EUR,"600,00",,"0,00",,"600,00",
+01-04-2024,00:00,Demo Zero,US0000000004,DEMO,,0,"0,00",EUR,"0,00",EUR,"0,00",,"0,00",,"0,00",
+22-03-2024,10:00,Demo Equity,US0000000001,DEMO,XDEM,-1,"220,00",EUR,"220,00",EUR,"220,00",,"0,00","-1,00","219,00",demo-sale-1
+01-02-2024,10:00,Demo Equity,US0000000001,DEMO,XDEM,1,"120,00",EUR,"-120,00",EUR,"-120,00",,"0,00","-1,00","-121,00",demo-buy-2
+10-01-2024,10:00,Demo Closed,US0000000003,DEMO,XDEM,-2,"14,00",EUR,"28,00",EUR,"28,00",,"0,00","-1,00","27,00",demo-closed-sale
+03-01-2024,10:00,Demo Pence,GB0000000002,LSE,XLON,1,"100,00",GBX,"-100,00",GBX,"-1,20","83,3333","0,00",,"-1,20",demo-partial-fill
+03-01-2024,10:00,Demo Pence,GB0000000002,LSE,XLON,1,"100,00",GBX,"-100,00",GBX,"-1,20","83,3333","0,00",,"-1,20",demo-partial-fill
+02-01-2024,10:00,Demo Pence,GB0000000002,LSE,XLON,10,"100,00",GBX,"-1000,00",GBX,"-12,00","83,3333","0,00",,"-12,00",demo-pence-buy
+02-01-2024,10:00,Demo Closed,US0000000003,DEMO,XDEM,2,"10,00",EUR,"-20,00",EUR,"-20,00",,"0,00","-1,00","-21,00",demo-closed-buy
+01-01-2024,10:00,Demo Equity,US0000000001,DEMO,XDEM,2,"100,00",EUR,"-200,00",EUR,"-200,00",,"0,00","-2,00","-202,00",demo-buy-1

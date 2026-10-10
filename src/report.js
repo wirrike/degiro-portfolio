@@ -9,18 +9,21 @@ import { compare, formatDecimal, formatQuantity, ZERO } from './decimal.js';
 const safeText = (text) => /^[\s\u0000-\u001f]*[=+@-]/u.test(text) ? `'${text}` : text;
 
 /**
- * Render one row per ISIN with EUR acquisition costs, never market valuations.
+ * Render open positions and positions with non-zero cumulative net sale proceeds in EUR.
  * @param {import('./portfolio.js').Portfolio} portfolio
  * @param {{ includeClosed?: boolean }} [options]
  * @returns {string}
  */
 export function createPortfolioCsv(portfolio, { includeClosed = false } = {}) {
-  const positions = portfolio.positions.filter((position) => includeClosed || compare(position.quantity, ZERO) !== 0);
+  const positions = portfolio.positions.filter((position) => includeClosed
+    || compare(position.quantity, ZERO) !== 0
+    || compare(position.saleProceedsEur, ZERO) !== 0);
   return stringifyCsv([
-    ['Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR', 'Currency', 'As of', 'Cost basis method'],
+    ['Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR', 'Sale proceeds EUR', 'Currency', 'As of', 'Cost basis method'],
     ...positions.map((position) => [
       safeText(position.product), position.isin, formatQuantity(position.quantity),
       formatDecimal(position.averageCostEur, 6), formatDecimal(position.costBasisEur),
+      formatDecimal(position.saleProceedsEur),
       'EUR', portfolio.asOf, 'weighted-average',
     ]),
   ]);

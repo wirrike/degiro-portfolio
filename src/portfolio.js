@@ -8,7 +8,8 @@ import { add, compare, divide, multiply, negate, subtract, sum, ZERO } from './d
  *   isin: string,
  *   quantity: Decimal,
  *   costBasisEur: Decimal,
- *   averageCostEur: Decimal
+ *   averageCostEur: Decimal,
+ *   saleProceedsEur: Decimal
  * }>} Position
  */
 /** @typedef {Readonly<{ asOf: string, positions: readonly Position[], corporateActionCount: number }>} Portfolio */
@@ -59,6 +60,10 @@ function applyGroup(position, rows, corporateAction) {
       : compare(position.quantity, ZERO) === 0
         ? ZERO
         : multiply(position.costBasisEur, divide(quantity, position.quantity));
+  // Administrativní odúčtování není příjem; skutečné prodeje sčítáme po poplatcích.
+  const saleProceedsEur = corporateAction
+    ? position.saleProceedsEur
+    : add(position.saleProceedsEur, sum(sells.map((row) => row.totalEur)));
   const names = (buys.length > 0 ? buys : rows).map((row) => row.product).sort();
   return {
     ...position,
@@ -66,11 +71,12 @@ function applyGroup(position, rows, corporateAction) {
     quantity,
     costBasisEur,
     averageCostEur: compare(quantity, ZERO) === 0 ? ZERO : divide(costBasisEur, quantity),
+    saleProceedsEur,
   };
 }
 
 /**
- * Compute long positions using exact moving weighted-average acquisition costs.
+ * Compute long positions, exact weighted-average costs and cumulative net sale proceeds.
  * All positions, including closed ones, are retained for independent validation.
  * @param {readonly Transaction[]} transactions
  * @returns {Portfolio}
@@ -84,7 +90,9 @@ export function calculatePortfolio(transactions) {
   let corporateActionCount = 0;
   for (const rows of groups.values()) {
     const { isin, product } = rows[0];
-    const previous = positions.get(isin) ?? { isin, product, quantity: ZERO, costBasisEur: ZERO, averageCostEur: ZERO };
+    const previous = positions.get(isin) ?? {
+      isin, product, quantity: ZERO, costBasisEur: ZERO, averageCostEur: ZERO, saleProceedsEur: ZERO,
+    };
     const corporateAction = isCorporateAction(rows);
     if (corporateAction) corporateActionCount += 1;
     positions.set(isin, applyGroup(previous, rows, corporateAction));

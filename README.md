@@ -1,6 +1,6 @@
 # DEGIRO Portfolio
 
-Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří přehled zbývajících pozic a jejich pořizovací hodnoty v EUR. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
+Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří přehled zbývajících pozic, jejich pořizovací hodnoty a čistých příjmů z prodejů v EUR. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
 
 „Za kolik“ zde znamená **pořizovací hodnotu zbývajících kusů včetně nákupních poplatků**, počítanou metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny. Výstup proto není aktuálním tržním oceněním ani výpisem hotovosti.
 
@@ -43,7 +43,7 @@ Očekávaný výsledek je v [examples/portfolio.csv](examples/portfolio.csv). P�
 | `-i`, `--input <soubor>` | Povinná cesta k CSV exportu Transactions. |
 | `-o`, `--output <soubor>` | Povinná cesta k výstupnímu CSV. |
 | `--verify <soubor>` | Před zápisem ověří počty proti referenčnímu CSV. |
-| `--include-closed` | Zahrne i nulové pozice, stále jeden řádek na ISIN. |
+| `--include-closed` | Zahrne i nulové pozice bez příjmů, stále jeden řádek na ISIN. |
 | `--force` | Povolí přepsání existujícího výstupu. |
 | `-h`, `--help` | Česká nápověda. |
 | `-v`, `--version` | Verze programu. |
@@ -73,11 +73,13 @@ Povinné sloupce jsou `Date`, `Time`, `Product`, `ISIN`, `Venue`, `Quantity`, `V
 
 1. Transakce se seřadí chronologicky a seskupí podle ISIN. Stejný titul obchodovaný na více burzách zůstane jedinou pozicí.
 2. Nákup přičte počet kusů a pořizovací hodnotu `−Total EUR`. Tato částka už obsahuje poplatky uvedené brokerem. Poplatky se znovu nepřičítají.
-3. Prodej odečte kusy a jejich dosavadní průměrnou pořizovací hodnotu. Výnos z prodeje ani prodejní poplatky nemění pořizovací cenu zbývajících kusů.
-4. Úplné uzavření pozice vynuluje její pořizovací hodnotu. Případný nový nákup začíná nový průměr.
-5. U rozpoznaných administrativních převodů se změní množství nebo název při zachování celkové pořizovací hodnoty.
+3. Prodej odečte kusy a jejich dosavadní průměrnou pořizovací hodnotu a přičte `Total EUR` k čistým příjmům z prodejů. Prodejní poplatky jsou v této částce již zohledněny. Výnos z prodeje ani prodejní poplatky nemění pořizovací cenu zbývajících kusů.
+4. Úplné uzavření pozice vynuluje její pořizovací hodnotu. Případný nový nákup začíná nový průměr. Součet příjmů z prodejů se zachová za celou dodanou historii ISIN, i při znovuotevření pozice.
+5. U rozpoznaných administrativních převodů se změní množství nebo název při zachování celkové pořizovací hodnoty i dosavadního příjmu z prodejů. Jejich účetní částky se do příjmů nepřičítají.
 
 Příklad: nákup 2 kusů za celkem 202 EUR a dalšího kusu za 121 EUR dává 3 kusy za 323 EUR. Po prodeji jednoho kusu zůstávají 2 kusy za `323 × 2 / 3` EUR. Split 1 : 10 změní počet na 20 kusů, ale tuto celkovou hodnotu nezmění. Po následném prodeji 5 kusů zbývá 15 kusů s pořizovací hodnotou 161,50 EUR.
+
+Pokud první prodej přinesl čistých 219 EUR a druhý 99 EUR, `Sale proceeds EUR` bude 318,00 EUR. Příjem je součet peněžních částek z prodejů po poplatcích, nikoli realizovaný zisk: pořizovací hodnota prodaných kusů se od něj neodečítá. Při poplatcích převyšujících cenu prodeje může být příjem záporný.
 
 Přesné zlomky založené na `BigInt` zamezují kumulaci chyb binární desetinné aritmetiky. Peníze se zaokrouhlí na dvě desetinná místa až při zápisu; průměr na kus na šest. Poloviny se zaokrouhlují od nuly. Počet kusů se vypíše přesně, bez zbytečných nul. Kvůli samostatnému zaokrouhlení nemusí vytištěný průměr násobený počtem dát přesně vytištěnou celkovou částku.
 
@@ -101,7 +103,7 @@ Shodné řádky ani shodná `Order ID` se **nededuplikují**: mohou představova
 
 ## Výstupní CSV
 
-Výstup obsahuje jeden řádek na otevřený ISIN, seřazený podle názvu produktu a ISIN. `--include-closed` přidá uzavřené a nulové pozice. Historické názvy stejného ISIN nevytvářejí další řádky.
+Výstup obsahuje jeden řádek na otevřený ISIN a automaticky také uzavřené pozice s nenulovým součtem příjmů z prodejů. Je seřazený podle názvu produktu a ISIN. `--include-closed` přidá ostatní nulové pozice. Historické názvy stejného ISIN nevytvářejí další řádky; příjmy za všechny jeho názvy se sčítají na jednom řádku.
 
 | Sloupec | Význam |
 | --- | --- |
@@ -110,6 +112,7 @@ Výstup obsahuje jeden řádek na otevřený ISIN, seřazený podle názvu produ
 | `Quantity` | Zbývající počet kusů, případně desetinný. |
 | `Average cost EUR` | Pořizovací hodnota na zbývající kus, 6 desetinných míst. |
 | `Cost basis EUR` | Celková pořizovací hodnota zbývajících kusů, 2 desetinná místa. |
+| `Sale proceeds EUR` | Součet `Total EUR` ze skutečných prodejů daného ISIN za celou dodanou historii, po poplatcích, 2 desetinná místa. |
 | `Currency` | Vždy `EUR`. |
 | `As of` | Datum poslední transakce v celém vstupu, `YYYY-MM-DD`. |
 | `Cost basis method` | Vždy `weighted-average`. |
@@ -153,7 +156,7 @@ npm test
 npm run test:coverage
 ```
 
-Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, nákupy, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
+Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, nákupy, částečné prodeje a jejich čisté příjmy, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
 
 ```text
 bin/degiro-portfolio.js   CLI a souborové operace

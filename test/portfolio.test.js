@@ -34,9 +34,12 @@ test('partial sales remove average acquisition cost, not sale proceeds', () => {
   assert.equal(formatQuantity(position.quantity), '2');
   assert.deepEqual(position.costBasisEur, decimal(74n, 3n));
   assert.deepEqual(position.averageCostEur, decimal(37n, 3n));
+  assert.deepEqual(position.saleProceedsEur, decimal(98n));
   assert.deepEqual(transactions, before);
   const soldAtLoss = rows.map((row) => row.Quantity === '-1' ? { ...row, 'Value EUR': '0,50', 'Total EUR': '-0,50' } : row);
-  assert.deepEqual(calculatePortfolio(parseTransactions(transactionCsv(soldAtLoss))).positions, [position]);
+  assert.deepEqual(calculatePortfolio(parseTransactions(transactionCsv(soldAtLoss))).positions, [
+    { ...position, saleProceedsEur: decimal(-1n, 2n) },
+  ]);
 });
 
 test('fees are taken once from Total EUR, and closing then reopening starts a new cost basis', () => {
@@ -48,6 +51,7 @@ test('fees are taken once from Total EUR, and closing then reopening starts a ne
   ]))).positions;
   assert.deepEqual(positions[0].costBasisEur, decimal(41n));
   assert.equal(formatQuantity(positions[0].quantity), '2');
+  assert.deepEqual(positions[0].saleProceedsEur, decimal(10n));
 });
 
 test('a reverse split preserves all acquisition costs', () => {
@@ -59,6 +63,7 @@ test('a reverse split preserves all acquisition costs', () => {
   assert.equal(formatQuantity(portfolio.positions[0].quantity), '2');
   assert.equal(formatDecimal(portfolio.positions[0].costBasisEur), '102.00');
   assert.equal(formatDecimal(portfolio.positions[0].averageCostEur), '51.00');
+  assert.deepEqual(portfolio.positions[0].saleProceedsEur, ZERO);
 });
 
 test('fractional quantities and repeated equal orders remain exact', () => {
@@ -68,13 +73,38 @@ test('fractional quantities and repeated equal orders remain exact', () => {
   assert.equal(formatDecimal(position.costBasisEur), '0.03');
 });
 
-test('closed portfolios produce a header and optional zero positions', () => {
+test('closed positions with sale proceeds are included automatically, zero-only positions are optional', () => {
   const portfolio = calculatePortfolio(parseTransactions(transactionCsv([
     {}, { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '12,00', 'Total EUR': '11,00' },
+    { Product: 'Zero', ISIN: 'US0000000002', Quantity: '0', 'Value EUR': '0,00', 'Total EUR': '0,00' },
   ])));
-  assert.equal(parseCsv(createPortfolioCsv(portfolio)).length, 1);
-  assert.equal(parseCsv(createPortfolioCsv(portfolio, { includeClosed: true })).length, 2);
+  assert.equal(parseCsv(createPortfolioCsv(portfolio)).length, 2);
+  assert.equal(parseCsv(createPortfolioCsv(portfolio, { includeClosed: true })).length, 3);
   assert.deepEqual(portfolio.positions[0].costBasisEur, ZERO);
+  assert.equal(parseCsv(createPortfolioCsv(portfolio))[1].cells[5], '11.00');
+});
+
+test('sale proceeds include identical fractional fills and are rounded only in CSV', () => {
+  const sale = { Date: '02-01-2024', Quantity: '-0,1', 'Value EUR': '0,006', 'Total EUR': '0,005' };
+  const portfolio = calculatePortfolio(parseTransactions(transactionCsv([
+    { Quantity: '0,3', 'Value EUR': '-0,03', 'Total EUR': '-0,03' }, sale, sale, sale,
+  ])));
+  assert.deepEqual(portfolio.positions[0].saleProceedsEur, decimal(3n, 200n));
+  assert.equal(parseCsv(createPortfolioCsv(portfolio))[1].cells[5], '0.02');
+  const feesExceedProceeds = calculatePortfolio(parseTransactions(transactionCsv([
+    {}, { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '0,50', 'Total EUR': '-0,50' },
+  ])));
+  assert.equal(parseCsv(createPortfolioCsv(feesExceedProceeds))[1].cells[5], '-0.50');
+});
+
+test('administrative rebookings preserve earlier sale proceeds without counting booked values', () => {
+  const portfolio = calculatePortfolio(parseTransactions(transactionCsv([
+    { Quantity: '3', 'Value EUR': '-30,00', 'Total EUR': '-31,00' },
+    { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '15,00', 'Total EUR': '14,00' },
+    { Date: '03-01-2024', Venue: '', Quantity: '-2', 'Value EUR': '600,00', 'Total EUR': '600,00' },
+    { Date: '03-01-2024', Venue: '', Quantity: '20', 'Value EUR': '-600,00', 'Total EUR': '-600,00' },
+  ])));
+  assert.deepEqual(portfolio.positions[0].saleProceedsEur, decimal(14n));
 });
 
 test('unknown opening cost, incomplete history, short positions and ambiguous order fail', () => {

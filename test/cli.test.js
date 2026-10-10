@@ -16,7 +16,7 @@ const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'u
 test('CLI exposes help, version and argument errors without writing files', () => {
   assert.equal(run(['--help']).status, 0);
   assert.match(run(['--help']).stdout, /Použití/u);
-  assert.equal(run(['--version']).stdout.trim(), '1.0.0');
+  assert.equal(run(['--version']).stdout.trim(), '1.1.0');
   assert.equal(run([]).status, 1);
   assert.equal(run(['--unknown']).status, 1);
 });

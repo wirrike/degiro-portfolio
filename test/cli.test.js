@@ -16,9 +16,27 @@ const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'u
 test('CLI exposes help, version and argument errors without writing files', () => {
   assert.equal(run(['--help']).status, 0);
   assert.match(run(['--help']).stdout, /Použití/u);
-  assert.equal(run(['--version']).stdout.trim(), '1.3.0');
+  assert.equal(run(['--version']).stdout.trim(), '1.4.0');
   assert.equal(run([]).status, 1);
   assert.equal(run(['--unknown']).status, 1);
+});
+
+test('CLI selects XLSX by extension and rejects unsupported output formats without writing', async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), 'degiro-xlsx-test-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const output = join(directory, 'portfolio.XLSX');
+  const args = ['-i', input, '-o', output, '--verify', reference];
+  const result = run(args);
+  assert.equal(result.status, 0, result.stderr);
+  const workbook = await readFile(output);
+  assert.equal(workbook.readUInt32LE(0), 0x04034b50);
+  assert.equal(run(args).status, 1);
+  assert.equal(run([...args, '--force']).status, 0);
+  const unsupported = join(directory, 'portfolio.pdf');
+  const invalid = run(['-i', input, '-o', unsupported]);
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /format must be csv or xlsx/u);
+  await assert.rejects(readFile(unsupported), { code: 'ENOENT' });
 });
 
 test('CLI verifies before writing, requires explicit overwrite, and protects inputs and aliases', async (context) => {

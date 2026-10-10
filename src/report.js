@@ -9,16 +9,24 @@ import { compare, formatDecimal, formatQuantity, ZERO } from './decimal.js';
 const safeText = (text) => /^[\s\u0000-\u001f]*[=+@-]/u.test(text) ? `'${text}` : text;
 
 /**
+ * Select the same positions for every output format.
+ * @param {import('./portfolio.js').Portfolio} portfolio
+ * @param {{ includeClosed?: boolean }} [options]
+ * @returns {import('./portfolio.js').Position[]}
+ */
+export const selectReportPositions = (portfolio, { includeClosed = false } = {}) => portfolio.positions.filter((position) => includeClosed
+  || compare(position.quantity, ZERO) !== 0
+  || compare(position.totalCostsEur, ZERO) !== 0
+  || compare(position.saleProceedsEur, ZERO) !== 0);
+
+/**
  * Render positions with holdings or lifetime transaction cash flows in EUR.
  * @param {import('./portfolio.js').Portfolio} portfolio
  * @param {{ includeClosed?: boolean }} [options]
  * @returns {string}
  */
 export function createPortfolioCsv(portfolio, { includeClosed = false } = {}) {
-  const positions = portfolio.positions.filter((position) => includeClosed
-    || compare(position.quantity, ZERO) !== 0
-    || compare(position.totalCostsEur, ZERO) !== 0
-    || compare(position.saleProceedsEur, ZERO) !== 0);
+  const positions = selectReportPositions(portfolio, { includeClosed });
   return stringifyCsv([
     [
       'Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR',

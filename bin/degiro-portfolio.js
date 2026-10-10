@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { createPortfolioReport } from '../src/index.js';
 
 const HELP = `Použití:
-  node bin/degiro-portfolio.js --input Transactions.csv --output portfolio.csv [volby]
+  node bin/degiro-portfolio.js --input Transactions.csv --output portfolio.xlsx [volby]
 
 Volby:
   -i, --input <soubor>     Anglický export DEGIRO Transactions v CSV.
-  -o, --output <soubor>    Výstupní CSV s pozicemi, celkovými náklady a příjmy v EUR.
+  -o, --output <soubor>    Výstupní XLSX dashboard (.xlsx), případně původní CSV (.csv).
       --verify <soubor>   Ověření počtů proti CSV se sloupci Product,Quantity.
       --include-closed    Zahrnout i nulové pozice bez peněžních toků (podle ISIN).
       --force             Povolit přepsání existujícího výstupu.
@@ -20,7 +20,9 @@ Pořizovací hodnota používá vážený průměr a Total EUR včetně poplatk�
 Celkové náklady a příjmy zahrnují skutečné obchody za celou historii ISIN.
 Výsledný peněžní stav je příjem z prodejů po poplatcích minus náklady nákupů.
 Uzavřené pozice s nenulovými náklady nebo příjmy se zahrnují automaticky.
-Výstup neobsahuje aktuální tržní ceny. Vstup musí zahrnovat celou historii.
+XLSX má editovatelné tickery a aktuální ceny v EUR; hodnoty dopočítají vzorce.
+Total Cost v XLSX znamená celkové nákupy minus příjmy z prodejů.
+Chybějící ocenění se zobrazí jako n.a. Vstup musí zahrnovat celou historii.
 `;
 
 /**
@@ -74,6 +76,7 @@ async function main() {
   const transactionsCsv = await readFile(values.input, 'utf8');
   const expectedQuantitiesCsv = values.verify ? await readFile(values.verify, 'utf8') : undefined;
   const report = createPortfolioReport(transactionsCsv, {
+    format: /** @type {'csv' | 'xlsx'} */ (extname(values.output).slice(1).toLowerCase()),
     includeClosed: values['include-closed'],
     expectedQuantitiesCsv,
   });
@@ -81,7 +84,8 @@ async function main() {
     const verified = report.verification;
     process.stderr.write(`Ověřeno: ${verified.productCount} názvů produktů, ${verified.isinCount} ISIN.\n`);
   }
-  await writeFile(values.output, report.csv, { encoding: 'utf8', flag: values.force ? 'w' : 'wx' });
+  await writeFile(values.output, report.xlsx ?? report.csv, { encoding: 'utf8', flag: values.force ? 'w' : 'wx' });
+  if (report.xlsx) process.stderr.write('V XLSX doplň tickery a aktuální ceny v EUR; ostatní tržní hodnoty dopočítají vzorce.\n');
   process.stderr.write(`Zapsáno: ${values.output}; otevřené pozice: ${report.openPositionCount}; stav k ${report.portfolio.asOf}; administrativní převody: ${report.portfolio.corporateActionCount}.\n`);
 }
 

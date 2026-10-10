@@ -6,5 +6,7 @@ coverage/
 output/
 private/
 Transactions*.csv
+*.xlsx
 !examples/*.csv
+!examples/*.xlsx
 *.tmp

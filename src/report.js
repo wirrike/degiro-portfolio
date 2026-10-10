@@ -9,7 +9,7 @@ import { compare, formatDecimal, formatQuantity, ZERO } from './decimal.js';
 const safeText = (text) => /^[\s\u0000-\u001f]*[=+@-]/u.test(text) ? `'${text}` : text;
 
 /**
- * Render open positions and positions with non-zero cumulative net sale proceeds in EUR.
+ * Render positions with holdings or lifetime transaction cash flows in EUR.
  * @param {import('./portfolio.js').Portfolio} portfolio
  * @param {{ includeClosed?: boolean }} [options]
  * @returns {string}
@@ -17,13 +17,17 @@ const safeText = (text) => /^[\s\u0000-\u001f]*[=+@-]/u.test(text) ? `'${text}` 
 export function createPortfolioCsv(portfolio, { includeClosed = false } = {}) {
   const positions = portfolio.positions.filter((position) => includeClosed
     || compare(position.quantity, ZERO) !== 0
+    || compare(position.totalCostsEur, ZERO) !== 0
     || compare(position.saleProceedsEur, ZERO) !== 0);
   return stringifyCsv([
-    ['Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR', 'Sale proceeds EUR', 'Currency', 'As of', 'Cost basis method'],
+    [
+      'Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR',
+      'Total costs EUR', 'Total income EUR', 'Net cash flow EUR', 'Currency', 'As of', 'Cost basis method',
+    ],
     ...positions.map((position) => [
       safeText(position.product), position.isin, formatQuantity(position.quantity),
       formatDecimal(position.averageCostEur, 6), formatDecimal(position.costBasisEur),
-      formatDecimal(position.saleProceedsEur),
+      formatDecimal(position.totalCostsEur), formatDecimal(position.saleProceedsEur), formatDecimal(position.netCashFlowEur),
       'EUR', portfolio.asOf, 'weighted-average',
     ]),
   ]);

@@ -1,8 +1,10 @@
 # DEGIRO Portfolio
 
-Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří přehled zbývajících pozic, jejich pořizovací hodnoty a čistých příjmů z prodejů v EUR. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
+Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří přehled pozic, jejich celkových nákladů, čistých příjmů z prodejů a výsledného peněžního stavu v EUR. Součástí je i pořizovací hodnota dosud držených kusů. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
 
 „Za kolik“ zde znamená **pořizovací hodnotu zbývajících kusů včetně nákupních poplatků**, počítanou metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny. Výstup proto není aktuálním tržním oceněním ani výpisem hotovosti.
+
+**Celkové náklady a příjmy** se sčítají za celou dodanou historii každého ISIN, včetně již prodaných kusů. **Výsledný peněžní stav = celkové příjmy − celkové náklady.** U plně uzavřené pozice jde o zisk nebo ztrátu z těchto obchodů po poplatcích. U otevřené pozice jde o dosavadní peněžní tok; část prostředků je stále investována do držených akcií a jejich současná tržní hodnota v tomto rozdílu není zahrnuta.
 
 ## Spuštění
 
@@ -43,7 +45,7 @@ Očekávaný výsledek je v [examples/portfolio.csv](examples/portfolio.csv). P�
 | `-i`, `--input <soubor>` | Povinná cesta k CSV exportu Transactions. |
 | `-o`, `--output <soubor>` | Povinná cesta k výstupnímu CSV. |
 | `--verify <soubor>` | Před zápisem ověří počty proti referenčnímu CSV. |
-| `--include-closed` | Zahrne i nulové pozice bez příjmů, stále jeden řádek na ISIN. |
+| `--include-closed` | Zahrne i nulové pozice bez nákladů a příjmů, stále jeden řádek na ISIN. |
 | `--force` | Povolí přepsání existujícího výstupu. |
 | `-h`, `--help` | Česká nápověda. |
 | `-v`, `--version` | Verze programu. |
@@ -72,22 +74,25 @@ Povinné sloupce jsou `Date`, `Time`, `Product`, `ISIN`, `Venue`, `Quantity`, `V
 ## Výpočet
 
 1. Transakce se seřadí chronologicky a seskupí podle ISIN. Stejný titul obchodovaný na více burzách zůstane jedinou pozicí.
-2. Nákup přičte počet kusů a pořizovací hodnotu `−Total EUR`. Tato částka už obsahuje poplatky uvedené brokerem. Poplatky se znovu nepřičítají.
+2. Nákup přičte počet kusů, pořizovací hodnotu a celkové historické náklady `−Total EUR`. Tato částka už obsahuje poplatky uvedené brokerem. Poplatky se znovu nepřičítají.
 3. Prodej odečte kusy a jejich dosavadní průměrnou pořizovací hodnotu a přičte `Total EUR` k čistým příjmům z prodejů. Prodejní poplatky jsou v této částce již zohledněny. Výnos z prodeje ani prodejní poplatky nemění pořizovací cenu zbývajících kusů.
-4. Úplné uzavření pozice vynuluje její pořizovací hodnotu. Případný nový nákup začíná nový průměr. Součet příjmů z prodejů se zachová za celou dodanou historii ISIN, i při znovuotevření pozice.
-5. U rozpoznaných administrativních převodů se změní množství nebo název při zachování celkové pořizovací hodnoty i dosavadního příjmu z prodejů. Jejich účetní částky se do příjmů nepřičítají.
+4. Úplné uzavření pozice vynuluje pořizovací hodnotu zbývajících kusů. Případný nový nákup začíná nový průměr. Celkové náklady i příjmy se zachovají za celou dodanou historii ISIN, i při znovuotevření pozice.
+5. U rozpoznaných administrativních převodů se změní množství nebo název při zachování pořizovací hodnoty zbývajících kusů i dosavadních celkových nákladů a příjmů. Jejich účetní částky se do nákladů ani příjmů nepřičítají.
+6. Výsledný peněžní stav se vypočte jako součet čistých příjmů z prodejů minus součet nákladů všech skutečných nákupů.
 
 Příklad: nákup 2 kusů za celkem 202 EUR a dalšího kusu za 121 EUR dává 3 kusy za 323 EUR. Po prodeji jednoho kusu zůstávají 2 kusy za `323 × 2 / 3` EUR. Split 1 : 10 změní počet na 20 kusů, ale tuto celkovou hodnotu nezmění. Po následném prodeji 5 kusů zbývá 15 kusů s pořizovací hodnotou 161,50 EUR.
 
-Pokud první prodej přinesl čistých 219 EUR a druhý 99 EUR, `Sale proceeds EUR` bude 318,00 EUR. Příjem je součet peněžních částek z prodejů po poplatcích, nikoli realizovaný zisk: pořizovací hodnota prodaných kusů se od něj neodečítá. Při poplatcích převyšujících cenu prodeje může být příjem záporný.
+Pokud první prodej přinesl čistých 219 EUR a druhý 99 EUR, `Total costs EUR` bude 323,00 EUR, `Total income EUR` bude 318,00 EUR a `Net cash flow EUR` bude −5,00 EUR. Stále držených 15 kusů má pořizovací hodnotu 161,50 EUR v samostatném sloupci `Cost basis EUR`. Příjem je součet peněžních částek z prodejů po poplatcích; pořizovací hodnota prodaných kusů se od něj neodečítá. Při poplatcích převyšujících cenu prodeje může být příjem záporný.
 
-Přesné zlomky založené na `BigInt` zamezují kumulaci chyb binární desetinné aritmetiky. Peníze se zaokrouhlí na dvě desetinná místa až při zápisu; průměr na kus na šest. Poloviny se zaokrouhlují od nuly. Počet kusů se vypíše přesně, bez zbytečných nul. Kvůli samostatnému zaokrouhlení nemusí vytištěný průměr násobený počtem dát přesně vytištěnou celkovou částku.
+Při nákupu za 100 EUR a následném úplném prodeji za čistých 120 EUR bude počet kusů 0, celkové náklady 100 EUR, celkové příjmy 120 EUR a výsledný stav +20 EUR. Hodnota zbývajících kusů v `Cost basis EUR` bude 0 EUR.
+
+Přesné zlomky založené na `BigInt` zamezují kumulaci chyb binární desetinné aritmetiky. Peníze se zaokrouhlí na dvě desetinná místa až při zápisu; průměr na kus na šest. Poloviny se zaokrouhlují od nuly. Počet kusů se vypíše přesně, bez zbytečných nul. Kvůli samostatnému zaokrouhlení nemusí vytištěný průměr násobený počtem dát přesně vytištěnou celkovou částku. Výsledný peněžní stav se také počítá z přesných součtů; při vstupních částkách se zlomky centu se může od rozdílu zaokrouhlených nákladů a příjmů lišit o cent.
 
 ### Měny a poplatky
 
 Referenční měna je pevně EUR a bere se přímo ze sloupce `Total EUR`. Místní cenu, `Exchange rate` ani `AutoFX Fee` skript znovu nepřepočítává. To je podstatné i pro britské pence GBX a pro historicky zaokrouhlené kurzy: další přepočet by částky změnil. Skutečné součty brokera navíc mohou mít proti součtu jednotlivých zobrazených složek centový rozdíl.
 
-Výpočet nezahrnuje dividendy, hotovost, úroky, samostatné poplatky mimo Transactions, daňové úpravy ani realizovaný zisk. Nejde o daňovou FIFO evidenci.
+Výpočet nezahrnuje dividendy, hotovost na účtu, úroky, samostatné poplatky mimo Transactions ani daňové úpravy. Realizovaný zisk z prodané části otevřené pozice se samostatně nepočítá. Nejde o daňovou FIFO evidenci.
 
 ### Splity, změny názvu a omezení
 
@@ -103,7 +108,7 @@ Shodné řádky ani shodná `Order ID` se **nededuplikují**: mohou představova
 
 ## Výstupní CSV
 
-Výstup obsahuje jeden řádek na otevřený ISIN a automaticky také uzavřené pozice s nenulovým součtem příjmů z prodejů. Je seřazený podle názvu produktu a ISIN. `--include-closed` přidá ostatní nulové pozice. Historické názvy stejného ISIN nevytvářejí další řádky; příjmy za všechny jeho názvy se sčítají na jednom řádku.
+Výstup obsahuje jeden řádek na otevřený ISIN a automaticky také uzavřené pozice s nenulovými celkovými náklady nebo příjmy. Je seřazený podle názvu produktu a ISIN. `--include-closed` přidá ostatní nulové pozice. Historické názvy stejného ISIN nevytvářejí další řádky; náklady a příjmy za všechny jeho názvy se sčítají na jednom řádku.
 
 | Sloupec | Význam |
 | --- | --- |
@@ -112,7 +117,9 @@ Výstup obsahuje jeden řádek na otevřený ISIN a automaticky také uzavřené
 | `Quantity` | Zbývající počet kusů, případně desetinný. |
 | `Average cost EUR` | Pořizovací hodnota na zbývající kus, 6 desetinných míst. |
 | `Cost basis EUR` | Celková pořizovací hodnota zbývajících kusů, 2 desetinná místa. |
-| `Sale proceeds EUR` | Součet `Total EUR` ze skutečných prodejů daného ISIN za celou dodanou historii, po poplatcích, 2 desetinná místa. |
+| `Total costs EUR` | Součet `−Total EUR` ze všech skutečných nákupů daného ISIN včetně poplatků, 2 desetinná místa. Zachovává se i po úplném prodeji. |
+| `Total income EUR` | Součet `Total EUR` ze skutečných prodejů daného ISIN za celou dodanou historii, po poplatcích, 2 desetinná místa. |
+| `Net cash flow EUR` | Výsledný peněžní stav: `Total income EUR − Total costs EUR`, 2 desetinná místa. |
 | `Currency` | Vždy `EUR`. |
 | `As of` | Datum poslední transakce v celém vstupu, `YYYY-MM-DD`. |
 | `Cost basis method` | Vždy `weighted-average`. |
@@ -156,7 +163,7 @@ npm test
 npm run test:coverage
 ```
 
-Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, nákupy, částečné prodeje a jejich čisté příjmy, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
+Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, celkové náklady, příjmy a jejich rozdíl, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
 
 ```text
 bin/degiro-portfolio.js   CLI a souborové operace

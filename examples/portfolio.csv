@@ -1,4 +1,4 @@
-Product,ISIN,Quantity,Average cost EUR,Cost basis EUR,Sale proceeds EUR,Currency,As of,Cost basis method
-Demo Closed,US0000000003,0,0.000000,0.00,27.00,EUR,2024-06-12,weighted-average
-Demo Pence,GB0000000002,12,1.200000,14.40,0.00,EUR,2024-06-12,weighted-average
-Demo Renamed,US0000000001,15,10.766667,161.50,318.00,EUR,2024-06-12,weighted-average
+Product,ISIN,Quantity,Average cost EUR,Cost basis EUR,Total costs EUR,Total income EUR,Net cash flow EUR,Currency,As of,Cost basis method
+Demo Closed,US0000000003,0,0.000000,0.00,21.00,27.00,6.00,EUR,2024-06-12,weighted-average
+Demo Pence,GB0000000002,12,1.200000,14.40,14.40,0.00,-14.40,EUR,2024-06-12,weighted-average
+Demo Renamed,US0000000001,15,10.766667,161.50,323.00,318.00,-5.00,EUR,2024-06-12,weighted-average

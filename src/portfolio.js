@@ -9,7 +9,9 @@ import { add, compare, divide, multiply, negate, subtract, sum, ZERO } from './d
  *   quantity: Decimal,
  *   costBasisEur: Decimal,
  *   averageCostEur: Decimal,
- *   saleProceedsEur: Decimal
+ *   totalCostsEur: Decimal,
+ *   saleProceedsEur: Decimal,
+ *   netCashFlowEur: Decimal
  * }>} Position
  */
 /** @typedef {Readonly<{ asOf: string, positions: readonly Position[], corporateActionCount: number }>} Portfolio */
@@ -60,7 +62,10 @@ function applyGroup(position, rows, corporateAction) {
       : compare(position.quantity, ZERO) === 0
         ? ZERO
         : multiply(position.costBasisEur, divide(quantity, position.quantity));
-  // Administrativní odúčtování není příjem; skutečné prodeje sčítáme po poplatcích.
+  // Celkové peněžní toky zachováváme i po uzavření; administrativní převody je nemění.
+  const totalCostsEur = corporateAction
+    ? position.totalCostsEur
+    : add(position.totalCostsEur, purchaseCost);
   const saleProceedsEur = corporateAction
     ? position.saleProceedsEur
     : add(position.saleProceedsEur, sum(sells.map((row) => row.totalEur)));
@@ -71,12 +76,14 @@ function applyGroup(position, rows, corporateAction) {
     quantity,
     costBasisEur,
     averageCostEur: compare(quantity, ZERO) === 0 ? ZERO : divide(costBasisEur, quantity),
+    totalCostsEur,
     saleProceedsEur,
+    netCashFlowEur: subtract(saleProceedsEur, totalCostsEur),
   };
 }
 
 /**
- * Compute long positions, exact weighted-average costs and cumulative net sale proceeds.
+ * Compute long positions, weighted-average costs and lifetime transaction cash flows.
  * All positions, including closed ones, are retained for independent validation.
  * @param {readonly Transaction[]} transactions
  * @returns {Portfolio}
@@ -91,7 +98,8 @@ export function calculatePortfolio(transactions) {
   for (const rows of groups.values()) {
     const { isin, product } = rows[0];
     const previous = positions.get(isin) ?? {
-      isin, product, quantity: ZERO, costBasisEur: ZERO, averageCostEur: ZERO, saleProceedsEur: ZERO,
+      isin, product, quantity: ZERO, costBasisEur: ZERO, averageCostEur: ZERO,
+      totalCostsEur: ZERO, saleProceedsEur: ZERO, netCashFlowEur: ZERO,
     };
     const corporateAction = isCorporateAction(rows);
     if (corporateAction) corporateActionCount += 1;

@@ -1,7 +1,7 @@
 {
   "name": "degiro-portfolio",
-  "version": "1.1.0",
-  "description": "Dependency-free DEGIRO Transactions CSV portfolio, EUR weighted-average cost basis and net sale proceeds calculator.",
+  "version": "1.2.0",
+  "description": "Dependency-free DEGIRO Transactions CSV portfolio, EUR cost basis and lifetime costs, income and net cash flow calculator.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

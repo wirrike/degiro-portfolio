@@ -10,16 +10,17 @@ const HELP = `Použití:
 
 Volby:
   -i, --input <soubor>     Anglický export DEGIRO Transactions v CSV.
-  -o, --output <soubor>    Výstupní CSV s počty, pořizovací hodnotou a příjmy v EUR.
+  -o, --output <soubor>    Výstupní CSV s pozicemi, celkovými náklady a příjmy v EUR.
       --verify <soubor>   Ověření počtů proti CSV se sloupci Product,Quantity.
-      --include-closed    Zahrnout i nulové pozice bez příjmů (podle ISIN).
+      --include-closed    Zahrnout i nulové pozice bez peněžních toků (podle ISIN).
       --force             Povolit přepsání existujícího výstupu.
   -h, --help              Zobrazit nápovědu.
   -v, --version           Zobrazit verzi.
 
 Pořizovací hodnota používá vážený průměr a Total EUR včetně poplatků.
-Příjmy z prodejů jsou čisté součty Total EUR za celou historii daného ISIN.
-Uzavřené pozice s nenulovým příjmem se zahrnují automaticky.
+Celkové náklady a příjmy zahrnují skutečné obchody za celou historii ISIN.
+Výsledný peněžní stav je příjem z prodejů po poplatcích minus náklady nákupů.
+Uzavřené pozice s nenulovými náklady nebo příjmy se zahrnují automaticky.
 Výstup neobsahuje aktuální tržní ceny. Vstup musí zahrnovat celou historii.
 `;
 

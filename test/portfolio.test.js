@@ -34,11 +34,13 @@ test('partial sales remove average acquisition cost, not sale proceeds', () => {
   assert.equal(formatQuantity(position.quantity), '2');
   assert.deepEqual(position.costBasisEur, decimal(74n, 3n));
   assert.deepEqual(position.averageCostEur, decimal(37n, 3n));
+  assert.deepEqual(position.totalCostsEur, decimal(37n));
   assert.deepEqual(position.saleProceedsEur, decimal(98n));
+  assert.deepEqual(position.netCashFlowEur, decimal(61n));
   assert.deepEqual(transactions, before);
   const soldAtLoss = rows.map((row) => row.Quantity === '-1' ? { ...row, 'Value EUR': '0,50', 'Total EUR': '-0,50' } : row);
   assert.deepEqual(calculatePortfolio(parseTransactions(transactionCsv(soldAtLoss))).positions, [
-    { ...position, saleProceedsEur: decimal(-1n, 2n) },
+    { ...position, saleProceedsEur: decimal(-1n, 2n), netCashFlowEur: decimal(-75n, 2n) },
   ]);
 });
 
@@ -51,7 +53,9 @@ test('fees are taken once from Total EUR, and closing then reopening starts a ne
   ]))).positions;
   assert.deepEqual(positions[0].costBasisEur, decimal(41n));
   assert.equal(formatQuantity(positions[0].quantity), '2');
+  assert.deepEqual(positions[0].totalCostsEur, decimal(51n));
   assert.deepEqual(positions[0].saleProceedsEur, decimal(10n));
+  assert.deepEqual(positions[0].netCashFlowEur, decimal(-41n));
 });
 
 test('a reverse split preserves all acquisition costs', () => {
@@ -63,7 +67,9 @@ test('a reverse split preserves all acquisition costs', () => {
   assert.equal(formatQuantity(portfolio.positions[0].quantity), '2');
   assert.equal(formatDecimal(portfolio.positions[0].costBasisEur), '102.00');
   assert.equal(formatDecimal(portfolio.positions[0].averageCostEur), '51.00');
+  assert.deepEqual(portfolio.positions[0].totalCostsEur, decimal(102n));
   assert.deepEqual(portfolio.positions[0].saleProceedsEur, ZERO);
+  assert.deepEqual(portfolio.positions[0].netCashFlowEur, decimal(-102n));
 });
 
 test('fractional quantities and repeated equal orders remain exact', () => {
@@ -71,9 +77,11 @@ test('fractional quantities and repeated equal orders remain exact', () => {
   const [position] = calculatePortfolio(parseTransactions(transactionCsv([row, row, row]))).positions;
   assert.equal(formatQuantity(position.quantity), '0.3');
   assert.equal(formatDecimal(position.costBasisEur), '0.03');
+  assert.deepEqual(position.totalCostsEur, decimal(3n, 100n));
+  assert.deepEqual(position.netCashFlowEur, decimal(-3n, 100n));
 });
 
-test('closed positions with sale proceeds are included automatically, zero-only positions are optional', () => {
+test('closed positions retain lifetime costs and income, zero-only positions are optional', () => {
   const portfolio = calculatePortfolio(parseTransactions(transactionCsv([
     {}, { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '12,00', 'Total EUR': '11,00' },
     { Product: 'Zero', ISIN: 'US0000000002', Quantity: '0', 'Value EUR': '0,00', 'Total EUR': '0,00' },
@@ -81,7 +89,9 @@ test('closed positions with sale proceeds are included automatically, zero-only 
   assert.equal(parseCsv(createPortfolioCsv(portfolio)).length, 2);
   assert.equal(parseCsv(createPortfolioCsv(portfolio, { includeClosed: true })).length, 3);
   assert.deepEqual(portfolio.positions[0].costBasisEur, ZERO);
-  assert.equal(parseCsv(createPortfolioCsv(portfolio))[1].cells[5], '11.00');
+  assert.deepEqual(portfolio.positions[0].totalCostsEur, decimal(11n));
+  assert.deepEqual(portfolio.positions[0].netCashFlowEur, ZERO);
+  assert.deepEqual(parseCsv(createPortfolioCsv(portfolio))[1].cells.slice(5, 8), ['11.00', '11.00', '0.00']);
 });
 
 test('sale proceeds include identical fractional fills and are rounded only in CSV', () => {
@@ -90,11 +100,11 @@ test('sale proceeds include identical fractional fills and are rounded only in C
     { Quantity: '0,3', 'Value EUR': '-0,03', 'Total EUR': '-0,03' }, sale, sale, sale,
   ])));
   assert.deepEqual(portfolio.positions[0].saleProceedsEur, decimal(3n, 200n));
-  assert.equal(parseCsv(createPortfolioCsv(portfolio))[1].cells[5], '0.02');
+  assert.deepEqual(parseCsv(createPortfolioCsv(portfolio))[1].cells.slice(5, 8), ['0.03', '0.02', '-0.02']);
   const feesExceedProceeds = calculatePortfolio(parseTransactions(transactionCsv([
     {}, { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '0,50', 'Total EUR': '-0,50' },
   ])));
-  assert.equal(parseCsv(createPortfolioCsv(feesExceedProceeds))[1].cells[5], '-0.50');
+  assert.deepEqual(parseCsv(createPortfolioCsv(feesExceedProceeds))[1].cells.slice(5, 8), ['11.00', '-0.50', '-11.50']);
 });
 
 test('administrative rebookings preserve earlier sale proceeds without counting booked values', () => {
@@ -104,7 +114,23 @@ test('administrative rebookings preserve earlier sale proceeds without counting 
     { Date: '03-01-2024', Venue: '', Quantity: '-2', 'Value EUR': '600,00', 'Total EUR': '600,00' },
     { Date: '03-01-2024', Venue: '', Quantity: '20', 'Value EUR': '-600,00', 'Total EUR': '-600,00' },
   ])));
+  assert.deepEqual(portfolio.positions[0].totalCostsEur, decimal(31n));
   assert.deepEqual(portfolio.positions[0].saleProceedsEur, decimal(14n));
+  assert.deepEqual(portfolio.positions[0].netCashFlowEur, decimal(-17n));
+});
+
+test('closed positions with zero net sale income still report their historical costs and loss', () => {
+  const portfolio = calculatePortfolio(parseTransactions(transactionCsv([
+    { Quantity: '2', 'Value EUR': '-20,00', 'Total EUR': '-22,00' },
+    { Date: '02-01-2024', Quantity: '-1', 'Value EUR': '2,00', 'Total EUR': '1,00' },
+    { Date: '03-01-2024', Quantity: '-1', 'Value EUR': '0,50', 'Total EUR': '-1,00' },
+  ])));
+  assert.deepEqual(portfolio.positions[0].quantity, ZERO);
+  assert.deepEqual(portfolio.positions[0].saleProceedsEur, ZERO);
+  assert.deepEqual(portfolio.positions[0].netCashFlowEur, decimal(-22n));
+  const records = parseCsv(createPortfolioCsv(portfolio));
+  assert.equal(records.length, 2);
+  assert.deepEqual(records[1].cells.slice(5, 8), ['22.00', '0.00', '-22.00']);
 });
 
 test('unknown opening cost, incomplete history, short positions and ambiguous order fail', () => {

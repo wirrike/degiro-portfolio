@@ -1,7 +1,7 @@
 {
   "name": "degiro-portfolio",
-  "version": "1.4.0",
-  "description": "Dependency-free DEGIRO Transactions CSV to XLSX portfolio dashboard with EUR cost basis and lifetime cash flows.",
+  "version": "1.5.0",
+  "description": "Dependency-free DEGIRO portfolio reports with EUR cost basis, lifetime cash flows and explicit ticker mappings.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
@@ -17,7 +17,7 @@
     "test": "node --test \"test/*.test.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"test/*.test.js\""
   },
-  "keywords": ["degiro", "portfolio", "xlsx", "csv", "eur", "cost-basis"],
+  "keywords": ["degiro", "portfolio", "xlsx", "csv", "eur", "cost-basis", "ticker"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wirrike/degiro-portfolio.git"

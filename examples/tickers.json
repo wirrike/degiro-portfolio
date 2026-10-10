@@ -1,0 +1,5 @@
+[
+  { "isin": "US0000000001", "ticker": "XDEM:DEMO" },
+  { "isin": "GB0000000002", "ticker": "LON:DEMO" },
+  { "isin": "US0000000003", "ticker": "XDEM:CLOSED" }
+]

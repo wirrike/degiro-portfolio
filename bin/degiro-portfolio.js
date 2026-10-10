@@ -2,7 +2,7 @@
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { createPortfolioReport } from '../src/index.js';
+import { createPortfolioReport, parseTickerMappings } from '../src/index.js';
 
 const HELP = `Použití:
   node bin/degiro-portfolio.js --input Transactions.csv --output portfolio.xlsx [volby]
@@ -11,6 +11,7 @@ Volby:
   -i, --input <soubor>     Anglický export DEGIRO Transactions v CSV.
   -o, --output <soubor>    Výstupní XLSX dashboard (.xlsx), případně původní CSV (.csv).
       --verify <soubor>   Ověření počtů proti CSV se sloupci Product,Quantity.
+      --tickers <soubor>  Převodní CSV (ISIN,Ticker) nebo JSON s vybranými tickery.
       --include-closed    Zahrnout i nulové pozice bez peněžních toků (podle ISIN).
       --force             Povolit přepsání existujícího výstupu.
   -h, --help              Zobrazit nápovědu.
@@ -42,7 +43,7 @@ async function protectInputs(output, inputs) {
     const inputStat = await stat(input);
     if (resolve(output) === await realpath(input)
       || (outputStat && inputStat.dev === outputStat.dev && inputStat.ino === outputStat.ino)) {
-      throw new Error('Output must not overwrite the input or reference file.');
+      throw new Error('Output must not overwrite the input, reference or ticker mapping file.');
     }
   }
 }
@@ -54,6 +55,7 @@ async function main() {
       input: { type: 'string', short: 'i' },
       output: { type: 'string', short: 'o' },
       verify: { type: 'string' },
+      tickers: { type: 'string' },
       'include-closed': { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
@@ -71,21 +73,31 @@ async function main() {
     return;
   }
   if (!values.input || !values.output) throw new Error('Both --input and --output are required. See --help.');
-  const inputs = [values.input, ...(values.verify ? [values.verify] : [])];
+  if (values.tickers !== undefined && !values.tickers) throw new Error('--tickers requires a non-empty file path.');
+  const inputs = [values.input, values.verify, values.tickers].filter((value) => value !== undefined);
   await protectInputs(values.output, inputs);
   const transactionsCsv = await readFile(values.input, 'utf8');
   const expectedQuantitiesCsv = values.verify ? await readFile(values.verify, 'utf8') : undefined;
+  const tickerMappings = values.tickers ? parseTickerMappings(await readFile(values.tickers, 'utf8'), {
+    format: /** @type {'csv' | 'json'} */ (extname(values.tickers).slice(1).toLowerCase()),
+  }) : undefined;
   const report = createPortfolioReport(transactionsCsv, {
     format: /** @type {'csv' | 'xlsx'} */ (extname(values.output).slice(1).toLowerCase()),
     includeClosed: values['include-closed'],
     expectedQuantitiesCsv,
+    tickerMappings,
   });
   if (report.verification) {
     const verified = report.verification;
     process.stderr.write(`Ověřeno: ${verified.productCount} názvů produktů, ${verified.isinCount} ISIN.\n`);
   }
   await writeFile(values.output, report.xlsx ?? report.csv, { encoding: 'utf8', flag: values.force ? 'w' : 'wx' });
-  if (report.xlsx) process.stderr.write('V XLSX doplň tickery a aktuální ceny v EUR; ostatní tržní hodnoty dopočítají vzorce.\n');
+  if (report.tickerCoverage) {
+    const { mappedPositionCount, unmappedIsins } = report.tickerCoverage;
+    process.stderr.write(`Tickery: ${mappedPositionCount} vyplněných pozic; bez mapování: ${unmappedIsins.length}.\n`);
+    if (unmappedIsins.length) process.stderr.write(`Chybějící tickery (ISIN): ${unmappedIsins.join(', ')}.\n`);
+  }
+  if (report.xlsx) process.stderr.write('V XLSX doplň chybějící tickery a aktuální ceny v EUR; tržní hodnoty dopočítají vzorce.\n');
   process.stderr.write(`Zapsáno: ${values.output}; otevřené pozice: ${report.openPositionCount}; stav k ${report.portfolio.asOf}; administrativní převody: ${report.portfolio.corporateActionCount}.\n`);
 }
 

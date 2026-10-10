@@ -2,7 +2,7 @@
 
 Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří **XLSX dashboard** s pozicemi, celkovými náklady, příjmy z prodejů a výsledným peněžním stavem v EUR. Podporuje i původní výstup CSV. Součástí je pořizovací hodnota dosud držených kusů. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
 
-Pořizovací hodnota zbývajících kusů včetně nákupních poplatků se počítá metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny ani tickery. **V XLSX je lze doplnit ručně**; tržní hodnoty, výnosy a alokace se pak dopočítají vzorci. Bez těchto cen se neznámé výsledky zobrazí jako `n.a.`, nikoliv jako nulové ocenění. Výstup není výpisem hotovosti na účtu.
+Pořizovací hodnota zbývajících kusů včetně nákupních poplatků se počítá metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny ani tickery. **Tickery lze doplnit z převodního CSV/JSON pomocí `--tickers`, nebo ručně v XLSX.** Aktuální ceny se zadávají ručně; tržní hodnoty, výnosy a alokace se pak dopočítají vzorci. Bez těchto cen se neznámé výsledky zobrazí jako `n.a.`, nikoliv jako nulové ocenění. Výstup není výpisem hotovosti na účtu.
 
 **Celkové náklady a příjmy** se sčítají za celou dodanou historii každého ISIN, včetně již prodaných kusů. **Výsledný peněžní stav = celkové příjmy − celkové náklady.** U plně uzavřené pozice jde o zisk nebo ztrátu z těchto obchodů po poplatcích. U otevřené pozice jde o dosavadní peněžní tok; část prostředků je stále investována do držených akcií a jejich současná tržní hodnota v tomto rozdílu není zahrnuta.
 
@@ -23,7 +23,7 @@ Případně přes npm:
 npm start -- --input /cesta/Transactions-en.csv --output /cesta/portfolio.xlsx
 ```
 
-Adresář výstupu musí existovat. Skript standardně odmítne přepsat existující soubor. K přepsání použij `--force`; vstupní ani referenční soubor přepsat nelze, včetně jejich symbolických a pevných odkazů.
+Adresář výstupu musí existovat. Skript standardně odmítne přepsat existující soubor. K přepsání použij `--force`; vstupní, referenční ani převodní soubor tickerů přepsat nelze, včetně jejich symbolických a pevných odkazů.
 
 ### Vyzkoušení na přiložených datech
 
@@ -33,10 +33,11 @@ Adresář `examples/` obsahuje pouze umělá demonstrační data, včetně split
 node bin/degiro-portfolio.js \
   --input examples/transactions.csv \
   --output demo-portfolio.xlsx \
-  --verify examples/expected-quantities.csv
+  --verify examples/expected-quantities.csv \
+  --tickers examples/tickers.csv
 ```
 
-Pro původní formát CSV změň příponu výstupu na `.csv`; očekávaný CSV výsledek je v [examples/portfolio.csv](examples/portfolio.csv). Při opakovaném spuštění přidej `--force` nebo změň jméno výstupu.
+Pro původní formát CSV změň příponu výstupu na `.csv`. Bez volby `--tickers` odpovídá očekávanému výsledku [examples/portfolio.csv](examples/portfolio.csv); s touto volbou obsahuje navíc sloupec `Ticker`. Při opakovaném spuštění přidej `--force` nebo změň jméno výstupu.
 
 ### Volby
 
@@ -45,12 +46,50 @@ Pro původní formát CSV změň příponu výstupu na `.csv`; očekávaný CSV 
 | `-i`, `--input <soubor>` | Povinná cesta k CSV exportu Transactions. |
 | `-o`, `--output <soubor>` | Povinná cesta; přípona `.xlsx` vytvoří dashboard, `.csv` původní přehled. Jiné přípony se odmítnou. |
 | `--verify <soubor>` | Před zápisem ověří počty proti referenčnímu CSV. |
+| `--tickers <soubor>` | Doplní tickery z převodního CSV nebo JSON; formát určuje přípona `.csv` nebo `.json`. |
 | `--include-closed` | Zahrne i nulové pozice bez nákladů a příjmů, stále jeden řádek na ISIN. |
 | `--force` | Povolí přepsání existujícího výstupu. |
 | `-h`, `--help` | Česká nápověda. |
 | `-v`, `--version` | Verze programu. |
 
 Průběh a chyby se vypisují na standardní chybový výstup. Návratový kód `0` znamená úspěch, `1` chybu. Při neplatném vstupu nebo neúspěšném ověření se výstup nezapisuje.
+
+### Převodní tabulka tickerů
+
+Připrav vlastní soubor s ověřeným mapováním ISIN na **jeden vybraný ticker včetně burzy**. CSV má povinné sloupce `ISIN` a `Ticker`, oddělené čárkou:
+
+```csv
+ISIN,Ticker
+US0000000001,XDEM:DEMO
+GB0000000002,LON:DEMO
+```
+
+Stejné mapování lze dodat jako JSON pole objektů:
+
+```json
+[
+  { "isin": "US0000000001", "ticker": "XDEM:DEMO" },
+  { "isin": "GB0000000002", "ticker": "LON:DEMO" }
+]
+```
+
+Uvedené identifikátory a tickery i soubory [examples/tickers.csv](examples/tickers.csv) a [examples/tickers.json](examples/tickers.json) jsou **syntetické příklady**, nikoliv veřejný seznam skutečných cenných papírů.
+
+```sh
+node bin/degiro-portfolio.js \
+  --input /cesta/Transactions-en.csv \
+  --output /cesta/portfolio.xlsx \
+  --tickers /cesta/tickers.csv
+```
+
+- ISIN se porovnává přesně po odstranění krajních mezer a převodu na velká písmena. Mapování platí i při přejmenování produktu a pro uzavřené pozice zahrnuté do reportu. Názvy produktů se nepoužívají jako náhradní klíč.
+- Každý ISIN smí být v mapě jen jednou. Duplicitní záznam se odmítne, i pokud obsahuje stejný ticker. U více burzovních kotací je potřeba nejprve zvolit jednu; skript nepřebírá první shodu ani neodvozuje burzu z místa provedení transakce. Portfolio nadále slučuje obchody podle ISIN.
+- Ticker musí mít tvar `BURZA:SYMBOL`, například `NASDAQ:NVDA`. Povolená jsou ASCII písmena, číslice, tečka, podtržítko a pomlčka; v části symbolu také lomítko. Zápis se jinak nemění. Jde o explicitně vybraný text, ne univerzální identifikátor všech cenových služeb.
+- Kontroluje se struktura, nikoliv existence tickeru, jeho soulad s ISIN ani kontrolní číslice ISIN. Správnost mapy a formátu pro konkrétní cenovou službu musí zajistit její autor.
+- Částečná mapa je platná. Chybějící tickery zůstanou prázdné a CLI vypíše počet vyplněných pozic i zbývající ISIN. Záznamy pro ISIN mimo report se ignorují. Prázdná mapa je CSV pouze se záhlavím nebo JSON `[]`; prázdný soubor nebo položky s chybějícím ISIN či tickerem se odmítnou.
+- CSV podporuje UTF-8 s volitelným BOM, uvozovky a běžné konce řádků. Na pořadí povinných sloupců nezáleží, jejich názvy rozlišují velikost písmen. Další sloupce nebo JSON vlastnosti se ignorují. JSON musí být pole, nikoliv objekt s ISIN jako klíči.
+
+Mapování nevyžaduje internet, API klíč ani externí balíček. **Nevyhledává nové tickery a nestahuje ceny.** Při opakovaném generování znovu použij stejný převodní soubor; ruční změny tickerů v již vytvořeném XLSX se do něj automaticky nepromítnou.
 
 ## Vstup
 
@@ -117,7 +156,7 @@ Jeden list `Portfolio` vychází z první verze `v4` dodané šablony: titul vle
 | Sloupec | Význam |
 | --- | --- |
 | A `ISIN`, B `Company` | Identifikátor a poslední známý název produktu. |
-| C `Ticker(s)` | Ručně doplňovaný text, například burza a ticker. Nemá vliv na výpočty. |
+| C `Ticker(s)` | Text doplněný přes `--tickers` nebo ručně, například burza a ticker. Zůstává editovatelný a nemá vliv na výpočty. |
 | D `Quantity` | Aktuální počet kusů. |
 | E `Bought Price` | Vážená pořizovací cena dosud drženého kusu: `Cost Basis / Quantity`; při nulovém množství 0. |
 | F `Total Cost` | **Čistě vložené prostředky = celkové nákupy − příjmy z prodejů.** Může být záporný. Není to pořizovací hodnota zbývajících kusů. |
@@ -155,6 +194,7 @@ Při vytvoření XLSX se přesné historické částky převádějí na číseln
 | `Currency` | Vždy `EUR`. |
 | `As of` | Datum poslední transakce v celém vstupu, `YYYY-MM-DD`. |
 | `Cost basis method` | Vždy `weighted-average`. |
+| `Ticker` | Přidá se na konec pouze při použití `--tickers` nebo API volby `tickerMappings`; prázdný, pokud ISIN není v mapě. |
 
 CSV používá UTF-8 bez BOM, čárky jako oddělovače, CRLF mezi záznamy a **desetinnou tečku**. V českém tabulkovém editoru při importu zvol čárku a odpovídající anglické číselné nastavení. Názvy produktů začínající znakem vzorce (`=`, `+`, `-`, `@`, případně po mezerách) dostanou ochranný apostrof.
 
@@ -195,13 +235,14 @@ npm test
 npm run test:coverage
 ```
 
-Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, celkové náklady, příjmy a jejich rozdíl, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, strukturu XLSX, vzorce a jejich rozsahy, formátování, ZIP kontrolní součty, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
+Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, celkové náklady, příjmy a jejich rozdíl, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, strukturu XLSX, vzorce a jejich rozsahy, formátování, ZIP kontrolní součty, mapování tickerů z CSV/JSON, neúplné a duplicitní mapy, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
 
 ```text
 bin/degiro-portfolio.js   CLI a souborové operace
 src/csv.js               Čtení a zápis CSV
 src/decimal.js           Přesná racionální aritmetika a formátování
 src/transactions.js      Validace a normalizace transakcí
+src/tickers.js           Čtení a validace explicitních mapování tickerů
 src/portfolio.js         Výpočet pozic a pořizovací hodnoty
 src/report.js            Formát výstupního portfolia
 src/xlsx.js              XLSX dashboard a excelové vzorce
@@ -225,21 +266,25 @@ Veřejná funkce `createPortfolioReport(transactionsCsv, options)` provede celý
 
 ```js
 import { readFile, writeFile } from 'node:fs/promises';
-import { createPortfolioReport } from './src/index.js';
+import { createPortfolioReport, parseTickerMappings } from './src/index.js';
 
 const transactionsCsv = await readFile('transactions.csv', 'utf8');
 const expectedQuantitiesCsv = await readFile('expected-quantities.csv', 'utf8');
+const tickerMappings = parseTickerMappings(await readFile('tickers.csv', 'utf8'));
 const report = createPortfolioReport(transactionsCsv, {
   format: 'xlsx',
   includeClosed: true,
   expectedQuantitiesCsv,
+  tickerMappings,
 });
 await writeFile('portfolio.xlsx', report.xlsx, { flag: 'wx' });
 ```
 
 Všechny volby jsou nepovinné. `format` má kvůli kompatibilitě knihovního API výchozí hodnotu `'csv'`; pro XLSX nastav `'xlsx'`. Bez `expectedQuantitiesCsv` se porovnání s referencí vynechá; dodaný prázdný nebo neplatný referenční text vyvolá chybu. `includeClosed` má výchozí hodnotu `false` a funguje stejně jako volba CLI. Neplatná data nebo nesoulad s referencí vyvolají `Error`, který může volající aplikace zachytit.
 
-Funkce vrací objekt s pěti položkami:
+`tickerMappings` je nepovinné pole objektů `{ isin, ticker }`. Lze ho předat přímo nebo získat čistou funkcí `parseTickerMappings(text, { format: 'csv' | 'json' })`; výchozí formát je CSV. Stejnou volbu přijímají také `createPortfolioCsv` a `createPortfolioXlsx`. Nepředaná mapa zachovává původní CSV formát; i explicitně prázdné pole přidá sloupec `Ticker`. Neplatné nebo duplicitní mapování vyvolá chybu před vytvořením výstupu. Žádná z těchto funkcí neprovádí síťové požadavky ani nemění dodaná data.
+
+Funkce vrací objekt s těmito položkami:
 
 | Položka | Význam |
 | --- | --- |
@@ -248,7 +293,8 @@ Funkce vrací objekt s pěti položkami:
 | `portfolio` | Všechny vypočtené pozice včetně nulových, datum stavu a počet administrativních převodů; peněžní hodnoty jsou přesné zlomky s `BigInt`. |
 | `verification` | Počet ověřených názvů produktů a ISIN, nebo `null`, pokud reference nebyla zadána. |
 | `openPositionCount` | Počet ISIN s nenulovým aktuálním množstvím. |
+| `tickerCoverage` | `{ mappedPositionCount, unmappedIsins }` pro pozice skutečně zahrnuté do reportu, včetně uzavřených s peněžními toky; `null`, pokud mapa nebyla zadána. |
 
-Vstupní i výstupní typy jsou popsány JSDoc v `src/portfolio-report.js`. Vstupní bod balíčku `src/index.js` exportuje také samostatné funkce `parseTransactions`, `calculatePortfolio`, `verifyQuantities`, `createPortfolioCsv` a `createPortfolioXlsx` pro použití jednotlivých kroků.
+Vstupní i výstupní typy jsou popsány JSDoc v `src/portfolio-report.js`. Vstupní bod balíčku `src/index.js` exportuje také samostatné funkce `parseTransactions`, `calculatePortfolio`, `verifyQuantities`, `parseTickerMappings`, `createPortfolioCsv` a `createPortfolioXlsx` pro použití jednotlivých kroků.
 
 Balíček má `private: true` a licenci `UNLICENSED`: není připraven k publikaci na npm a není mu bez rozhodnutí vlastníka přidělena open-source licence.

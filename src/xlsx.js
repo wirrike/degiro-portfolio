@@ -1,5 +1,6 @@
 import { compare, ZERO } from './decimal.js';
 import { selectReportPositions } from './report.js';
+import { createTickerLookup } from './tickers.js';
 import { excelNumber, formulaCell, numberCell, rowXml, textCell } from './xlsx-cells.js';
 import { createXlsxPackage, WORKSHEET_NAMESPACE } from './xlsx-package.js';
 import { XLSX_STYLE as STYLE } from './xlsx-styles.js';
@@ -13,13 +14,14 @@ const total = (values) => values.reduce((result, value) => result + value, 0);
 
 /**
  * Render a dashboard inspired by the template's v4 layout, without copying its data.
- * Market prices and tickers are editable inputs, never inferred from transactions.
+ * Prices remain editable inputs; tickers may come from an explicit mapping, never a guess.
  * @param {import('./portfolio.js').Portfolio} portfolio
- * @param {{ includeClosed?: boolean }} [options]
+ * @param {{ includeClosed?: boolean, tickerMappings?: readonly import('./tickers.js').TickerMapping[] }} [options]
  * @returns {Buffer}
  */
-export function createPortfolioXlsx(portfolio, { includeClosed = false } = {}) {
+export function createPortfolioXlsx(portfolio, { includeClosed = false, tickerMappings } = {}) {
   const positions = selectReportPositions(portfolio, { includeClosed });
+  const tickers = createTickerLookup(tickerMappings);
   if (positions.length > 1_048_576 - FIRST_DATA_ROW + 1) throw new Error('Too many positions for an Excel worksheet.');
   const lastRow = FIRST_DATA_ROW + positions.length - 1;
   const numeric = positions.map((position) => ({
@@ -57,7 +59,7 @@ export function createPortfolioXlsx(portfolio, { includeClosed = false } = {}) {
     const gain = closed ? -invested : MISSING;
     return rowXml(row, [
       textCell(`A${row}`, position.isin), textCell(`B${row}`, position.product),
-      textCell(`C${row}`, '', STYLE.inputText), numberCell(`D${row}`, quantity, STYLE.quantity),
+      textCell(`C${row}`, tickers.get(position.isin) ?? '', STYLE.inputText), numberCell(`D${row}`, quantity, STYLE.quantity),
       formulaCell(`E${row}`, `IF(D${row}=0,0,Q${row}/D${row})`, closed ? 0 : basis / quantity),
       formulaCell(`F${row}`, `N${row}-O${row}`, invested),
       textCell(`G${row}`, '', STYLE.inputMoney),
@@ -72,7 +74,8 @@ export function createPortfolioXlsx(portfolio, { includeClosed = false } = {}) {
     ]);
   });
   const widths = [16, Math.min(65, positions.reduce((width, position) => Math.max(width, position.product.length + 2), 30)),
-    16, 12, 15, 16, 15, 16, 16, 18, 12, 11, 3, 17, 18, 17, 17, 18];
+    Math.min(65, positions.reduce((width, position) => Math.max(width, (tickers.get(position.isin)?.length ?? 0) + 2), 16)),
+    12, 15, 16, 15, 16, 16, 18, 12, 11, 3, 17, 18, 17, 17, 18];
   const columns = widths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('');
   const formats = positions.length ? `<conditionalFormatting sqref="I6:J${lastRow} P6:P${lastRow} R6:R${lastRow}"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>0</formula></cfRule><cfRule type="cellIs" dxfId="1" priority="2" operator="lessThan"><formula>0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="J3"><cfRule type="cellIs" dxfId="0" priority="3" operator="greaterThan"><formula>0</formula></cfRule><cfRule type="cellIs" dxfId="1" priority="4" operator="lessThan"><formula>0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="K6:K${lastRow}"><cfRule type="dataBar" priority="5"><dataBar minLength="0" maxLength="100" showValue="0"><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FF338590"/></dataBar></cfRule></conditionalFormatting><dataValidations count="1"><dataValidation type="decimal" operator="greaterThanOrEqual" allowBlank="1" showErrorMessage="1" errorTitle="Invalid EUR price" error="Enter a non-negative numeric price in EUR." sqref="G6:G${lastRow}"><formula1>0</formula1></dataValidation></dataValidations>` : '';
   const sheet = xmlDocument([

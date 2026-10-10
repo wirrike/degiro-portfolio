@@ -1,5 +1,6 @@
 import { stringifyCsv } from './csv.js';
 import { compare, formatDecimal, formatQuantity, ZERO } from './decimal.js';
+import { createTickerLookup } from './tickers.js';
 
 /**
  * Protect human-readable CSV text against spreadsheet formula interpretation.
@@ -22,21 +23,24 @@ export const selectReportPositions = (portfolio, { includeClosed = false } = {})
 /**
  * Render positions with holdings or lifetime transaction cash flows in EUR.
  * @param {import('./portfolio.js').Portfolio} portfolio
- * @param {{ includeClosed?: boolean }} [options]
+ * @param {{ includeClosed?: boolean, tickerMappings?: readonly import('./tickers.js').TickerMapping[] }} [options]
  * @returns {string}
  */
-export function createPortfolioCsv(portfolio, { includeClosed = false } = {}) {
+export function createPortfolioCsv(portfolio, { includeClosed = false, tickerMappings } = {}) {
   const positions = selectReportPositions(portfolio, { includeClosed });
+  const tickers = createTickerLookup(tickerMappings);
   return stringifyCsv([
     [
       'Product', 'ISIN', 'Quantity', 'Average cost EUR', 'Cost basis EUR',
       'Total costs EUR', 'Total income EUR', 'Net cash flow EUR', 'Currency', 'As of', 'Cost basis method',
+      ...(tickerMappings === undefined ? [] : ['Ticker']),
     ],
     ...positions.map((position) => [
       safeText(position.product), position.isin, formatQuantity(position.quantity),
       formatDecimal(position.averageCostEur, 6), formatDecimal(position.costBasisEur),
       formatDecimal(position.totalCostsEur), formatDecimal(position.saleProceedsEur), formatDecimal(position.netCashFlowEur),
       'EUR', portfolio.asOf, 'weighted-average',
+      ...(tickerMappings === undefined ? [] : [tickers.get(position.isin) ?? '']),
     ]),
   ]);
 }

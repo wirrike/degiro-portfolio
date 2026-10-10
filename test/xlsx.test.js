@@ -92,3 +92,26 @@ test('XLSX formulas and ranges extend consistently to later positions', () => {
   assert.match(cellXml(sheet, 'H3'), /COUNT\(H6:H35\)/u);
   assert.match(sheet, /sqref="K6:K35"/u);
 });
+
+test('XLSX fills literal tickers by ISIN while keeping prices, formulas and styles unchanged', async () => {
+  const csv = await readFile(new URL('../examples/transactions.csv', import.meta.url), 'utf8');
+  const baseline = readZipParts(createPortfolioReport(csv, { format: 'xlsx' }).xlsx);
+  const tickerMappings = [{ isin: 'US0000000001', ticker: 'NASDAQ:LONG_DEMO_SYMBOL' }];
+  const report = createPortfolioReport(csv, { format: 'xlsx', tickerMappings });
+  assert.deepEqual(report.xlsx, createPortfolioXlsx(report.portfolio, { tickerMappings }));
+  const parts = readZipParts(report.xlsx);
+  const sheet = parts.get('xl/worksheets/sheet1.xml');
+  assert.match(cellXml(sheet, 'C8'), /s="8" t="inlineStr".*NASDAQ:LONG_DEMO_SYMBOL/u);
+  assert.doesNotMatch(cellXml(sheet, 'C8'), /<f>/u);
+  assert.equal(cellXml(sheet, 'C6'), cellXml(baseline.get('xl/worksheets/sheet1.xml'), 'C6'));
+  for (const row of [6, 7, 8]) {
+    for (const column of ['A', 'B', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'N', 'O', 'P', 'Q', 'R']) {
+      assert.equal(cellXml(sheet, `${column}${row}`), cellXml(baseline.get('xl/worksheets/sheet1.xml'), `${column}${row}`));
+    }
+  }
+  for (const [name, contents] of baseline) {
+    if (name !== 'xl/worksheets/sheet1.xml') assert.equal(parts.get(name), contents);
+  }
+  assert.match(sheet, /<col min="3" max="3" width="25"/u);
+  assert.throws(() => createPortfolioXlsx(report.portfolio, { tickerMappings: [{ isin: 'US0000000001', ticker: '=1+2' }] }), /Invalid ticker/u);
+});

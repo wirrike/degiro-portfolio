@@ -1,6 +1,6 @@
 {
   "name": "degiro-portfolio",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Dependency-free DEGIRO Transactions CSV portfolio, EUR cost basis and lifetime costs, income and net cash flow calculator.",
   "type": "module",
   "private": true,

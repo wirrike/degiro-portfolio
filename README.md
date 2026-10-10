@@ -173,6 +173,7 @@ src/transactions.js      Validace a normalizace transakcí
 src/portfolio.js         Výpočet pozic a pořizovací hodnoty
 src/report.js            Formát výstupního portfolia
 src/verification.js      Porovnání s referenčními počty
+src/portfolio-report.js  Zpracování exportu do přehledu, použitelné mimo CLI
 src/index.js             Veřejné funkce
 test/                    Automatické testy
 examples/                Syntetické příklady
@@ -182,13 +183,32 @@ Výpočtové funkce nemění předané transakce, neprovádějí I/O a vracejí 
 
 ### Použití jako knihovny
 
-```js
-import { readFile } from 'node:fs/promises';
-import { parseTransactions, calculatePortfolio, createPortfolioCsv } from './src/index.js';
+Veřejná funkce `createPortfolioReport(transactionsCsv, options)` provede celý postup: načtení transakcí z textu, výpočet portfolia, volitelné ověření počtů a vytvoření výstupního CSV. Je synchronní, pracuje pouze s předanými daty a neprovádí souborové operace ani výpis do konzole. Načtení a uložení souborů zajišťuje volající aplikace.
 
-const transactions = parseTransactions(await readFile('transactions.csv', 'utf8'));
-const portfolio = calculatePortfolio(transactions);
-const csv = createPortfolioCsv(portfolio, { includeClosed: true });
+```js
+import { readFile, writeFile } from 'node:fs/promises';
+import { createPortfolioReport } from './src/index.js';
+
+const transactionsCsv = await readFile('transactions.csv', 'utf8');
+const expectedQuantitiesCsv = await readFile('expected-quantities.csv', 'utf8');
+const report = createPortfolioReport(transactionsCsv, {
+  includeClosed: true,
+  expectedQuantitiesCsv,
+});
+await writeFile('portfolio.csv', report.csv, { encoding: 'utf8', flag: 'wx' });
 ```
+
+Obě volby jsou nepovinné. Bez `expectedQuantitiesCsv` se porovnání s referencí vynechá; dodaný prázdný nebo neplatný referenční text vyvolá chybu. `includeClosed` má výchozí hodnotu `false` a funguje stejně jako volba CLI. Neplatná data nebo nesoulad s referencí vyvolají `Error`, který může volající aplikace zachytit.
+
+Funkce vrací objekt se čtyřmi položkami:
+
+| Položka | Význam |
+| --- | --- |
+| `csv` | Hotový výstupní CSV text. |
+| `portfolio` | Všechny vypočtené pozice včetně nulových, datum stavu a počet administrativních převodů; peněžní hodnoty jsou přesné zlomky s `BigInt`. |
+| `verification` | Počet ověřených názvů produktů a ISIN, nebo `null`, pokud reference nebyla zadána. |
+| `openPositionCount` | Počet ISIN s nenulovým aktuálním množstvím. |
+
+Vstupní i výstupní typy jsou popsány JSDoc v `src/portfolio-report.js`. Vstupní bod balíčku `src/index.js` exportuje také samostatné funkce `parseTransactions`, `calculatePortfolio`, `verifyQuantities` a `createPortfolioCsv` pro použití jednotlivých kroků.
 
 Balíček má `private: true` a licenci `UNLICENSED`: není připraven k publikaci na npm a není mu bez rozhodnutí vlastníka přidělena open-source licence.

@@ -2,8 +2,7 @@
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { calculatePortfolio, createPortfolioCsv, parseTransactions, verifyQuantities } from '../src/index.js';
-import { compare, ZERO } from '../src/decimal.js';
+import { createPortfolioReport } from '../src/index.js';
 
 const HELP = `Použití:
   node bin/degiro-portfolio.js --input Transactions.csv --output portfolio.csv [volby]
@@ -72,16 +71,18 @@ async function main() {
   if (!values.input || !values.output) throw new Error('Both --input and --output are required. See --help.');
   const inputs = [values.input, ...(values.verify ? [values.verify] : [])];
   await protectInputs(values.output, inputs);
-  const transactions = parseTransactions(await readFile(values.input, 'utf8'));
-  const portfolio = calculatePortfolio(transactions);
-  if (values.verify) {
-    const verified = verifyQuantities(transactions, portfolio, await readFile(values.verify, 'utf8'));
+  const transactionsCsv = await readFile(values.input, 'utf8');
+  const expectedQuantitiesCsv = values.verify ? await readFile(values.verify, 'utf8') : undefined;
+  const report = createPortfolioReport(transactionsCsv, {
+    includeClosed: values['include-closed'],
+    expectedQuantitiesCsv,
+  });
+  if (report.verification) {
+    const verified = report.verification;
     process.stderr.write(`Ověřeno: ${verified.productCount} názvů produktů, ${verified.isinCount} ISIN.\n`);
   }
-  const csv = createPortfolioCsv(portfolio, { includeClosed: values['include-closed'] });
-  await writeFile(values.output, csv, { encoding: 'utf8', flag: values.force ? 'w' : 'wx' });
-  const openCount = portfolio.positions.filter((position) => compare(position.quantity, ZERO) !== 0).length;
-  process.stderr.write(`Zapsáno: ${values.output}; otevřené pozice: ${openCount}; stav k ${portfolio.asOf}; administrativní převody: ${portfolio.corporateActionCount}.\n`);
+  await writeFile(values.output, report.csv, { encoding: 'utf8', flag: values.force ? 'w' : 'wx' });
+  process.stderr.write(`Zapsáno: ${values.output}; otevřené pozice: ${report.openPositionCount}; stav k ${report.portfolio.asOf}; administrativní převody: ${report.portfolio.corporateActionCount}.\n`);
 }
 
 try {

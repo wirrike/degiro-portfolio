@@ -2,7 +2,7 @@
 
 Skript pro **Node.js 24.21.0**, který z anglického CSV exportu DEGIRO **Transactions** vytvoří **XLSX dashboard** s pozicemi, celkovými náklady, příjmy z prodejů a výsledným peněžním stavem v EUR. Podporuje i původní výstup CSV. Součástí je pořizovací hodnota dosud držených kusů. Nemá žádné externí runtime ani vývojové závislosti. Používá ES moduly, JSDoc a vestavěný testovací framework Node.js.
 
-Pořizovací hodnota zbývajících kusů včetně nákupních poplatků se počítá metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny ani tickery. **Tickery lze doplnit z převodního CSV/JSON pomocí `--tickers`, nebo ručně v XLSX.** Aktuální ceny se zadávají ručně; tržní hodnoty, výnosy a alokace se pak dopočítají vzorci. Bez těchto cen se neznámé výsledky zobrazí jako `n.a.`, nikoliv jako nulové ocenění. Výstup není výpisem hotovosti na účtu.
+Pořizovací hodnota zbývajících kusů včetně nákupních poplatků se počítá metodou průběžného váženého průměru. Export transakcí neobsahuje aktuální tržní ceny ani tickery. **Tickery lze doplnit z převodního CSV/JSON pomocí `--tickers`, nebo ručně v XLSX.** Výchozí XLSX obsahuje vzorce `GOOGLEFINANCE`, které **až po převodu do nativních Google Sheets** načtou ceny a aktuální kurzy a přepočtou ocenění do EUR. Node.js nic nestahuje a nepotřebuje API klíč. Pro Excel zvol `--price-source manual` a ceny doplň ručně v EUR. Bez dostupných cen se neznámé výsledky nezamění za nulové ocenění. Výstup není výpisem hotovosti na účtu.
 
 **Celkové náklady a příjmy** se sčítají za celou dodanou historii každého ISIN, včetně již prodaných kusů. **Výsledný peněžní stav = celkové příjmy − celkové náklady.** U plně uzavřené pozice jde o zisk nebo ztrátu z těchto obchodů po poplatcích. U otevřené pozice jde o dosavadní peněžní tok; část prostředků je stále investována do držených akcií a jejich současná tržní hodnota v tomto rozdílu není zahrnuta.
 
@@ -47,6 +47,7 @@ Pro původní formát CSV změň příponu výstupu na `.csv`. Bez volby `--tick
 | `-o`, `--output <soubor>` | Povinná cesta; přípona `.xlsx` vytvoří dashboard, `.csv` původní přehled. Jiné přípony se odmítnou. |
 | `--verify <soubor>` | Před zápisem ověří počty proti referenčnímu CSV. |
 | `--tickers <soubor>` | Doplní tickery z převodního CSV nebo JSON; formát určuje přípona `.csv` nebo `.json`. |
+| `--price-source <zdroj>` | Pouze XLSX: `googlefinance` (výchozí, pro Google Sheets) nebo `manual` (ruční ceny v EUR, pro Excel). U CSV se tato volba odmítne. |
 | `--include-closed` | Zahrne i nulové pozice bez nákladů a příjmů, stále jeden řádek na ISIN. |
 | `--force` | Povolí přepsání existujícího výstupu. |
 | `-h`, `--help` | Česká nápověda. |
@@ -89,7 +90,27 @@ node bin/degiro-portfolio.js \
 - Částečná mapa je platná. Chybějící tickery zůstanou prázdné a CLI vypíše počet vyplněných pozic i zbývající ISIN. Záznamy pro ISIN mimo report se ignorují. Prázdná mapa je CSV pouze se záhlavím nebo JSON `[]`; prázdný soubor nebo položky s chybějícím ISIN či tickerem se odmítnou.
 - CSV podporuje UTF-8 s volitelným BOM, uvozovky a běžné konce řádků. Na pořadí povinných sloupců nezáleží, jejich názvy rozlišují velikost písmen. Další sloupce nebo JSON vlastnosti se ignorují. JSON musí být pole, nikoliv objekt s ISIN jako klíči.
 
-Mapování nevyžaduje internet, API klíč ani externí balíček. **Nevyhledává nové tickery a nestahuje ceny.** Při opakovaném generování znovu použij stejný převodní soubor; ruční změny tickerů v již vytvořeném XLSX se do něj automaticky nepromítnou.
+Samotné mapování nevyžaduje internet, API klíč ani externí balíček. **Nevyhledává nové tickery a nestahuje ceny.** Ve výchozím XLSX ale tyto tickery používají vzorce `GOOGLEFINANCE` po převodu do Google Sheets. Ticker musí odpovídat zápisu této služby, například `NASDAQ:NVDA`, nikoliv samotnému ISIN. Při opakovaném generování znovu použij stejný převodní soubor; ruční změny tickerů v již vytvořeném XLSX se do něj automaticky nepromítnou.
+
+### Automatické ceny v Google Sheets
+
+1. Vygeneruj XLSX s výchozím zdrojem `googlefinance` a pokud možno s ověřenou mapou `--tickers`.
+2. V Google Sheets použij **Soubor → Importovat → Nahrát** a vyber XLSX; vytvoř novou tabulku. Pokud soubor otevíráš z Google Drive v režimu úprav Excelu, zvol **Soubor → Uložit jako Tabulky Google**. Je potřeba nativní Google Sheets, ne pouze náhled XLSX. Viz [návod Googlu k importu a převodu](https://support.google.com/docs/answer/9331167?hl=en).
+3. Do žlutého sloupce C `Ticker(s)` doplň chybějící **jeden ticker včetně burzy**. Po načtení služby se `Current Price` ve sloupci G vyplní v EUR a dopočítají se hodnoty, zisky a alokace. Syntetické tickery v `examples/` skutečné ceny neposkytují.
+4. Vpravo ve sloupcích S–W ověř kotaci, její měnu, jednotkový faktor, kurz do EUR a čas posledního obchodu. Sloupce G a S–W obsahují vzorce, nikoliv ruční vstupy.
+
+Podle [dokumentace GOOGLEFINANCE](https://support.google.com/docs/answer/3093281?hl=en) mohou být ceny zpožděné až o 20 minut; služba nepokrývá většinu zahraničních burz a ne všechny atributy fungují pro všechny instrumenty. Nepodporovaný ticker nebo atribut může vrátit chybu, například `#N/A`. Ta zůstává viditelná ve zdrojových buňkách; skript ji nepřevádí na nulu. Chybějící ticker vrací `n.a.`. Uzavřená pozice má hodnotu 0 a nepotřebuje cenové ani kurzové dotazy. Při problému zkontroluj burzu a symbol, případně vytvoř samostatný report s ručními cenami.
+
+Jde o **živé vzorce, nikoliv cenový snímek při spuštění Node.js**. Kotace a kurz se mohou aktualizovat v různých okamžicích; `Quote Time` je čas posledního obchodu instrumentu, ne čas kurzu či vygenerování reportu. Datum u titulku označuje konec historie transakcí. Ocenění staré historie dnešní cenou nenahrazuje doplnění novějších obchodů. Údaje jsou informativní, nikoliv podklad k provedení obchodu.
+
+`GOOGLEFINANCE` nefunguje v běžném Excelu; ani stažení tabulky zpět do XLSX nevytvoří podporu této funkce v Excelu. Pro offline Excel použij:
+
+```sh
+node bin/degiro-portfolio.js \
+  --input /cesta/Transactions-en.csv \
+  --output /cesta/portfolio-manual.xlsx \
+  --price-source manual
+```
 
 ## Vstup
 
@@ -129,7 +150,7 @@ Přesné zlomky založené na `BigInt` zamezují kumulaci chyb binární desetin
 
 ### Měny a poplatky
 
-Referenční měna je pevně EUR a bere se přímo ze sloupce `Total EUR`. Místní cenu, `Exchange rate` ani `AutoFX Fee` skript znovu nepřepočítává. To je podstatné i pro britské pence GBX a pro historicky zaokrouhlené kurzy: další přepočet by částky změnil. Skutečné součty brokera navíc mohou mít proti součtu jednotlivých zobrazených složek centový rozdíl.
+Referenční měna historie je pevně EUR a bere se přímo ze sloupce `Total EUR`. Místní cenu, `Exchange rate` ani `AutoFX Fee` skript znovu nepřepočítává. To je podstatné i pro britské pence GBX a pro historicky zaokrouhlené kurzy: další přepočet by částky změnil. Skutečné součty brokera navíc mohou mít proti součtu jednotlivých zobrazených složek centový rozdíl. Aktuální tržní ocenění je samostatný výpočet: používá aktuální měnu kotace a kurz z `GOOGLEFINANCE`, nikoliv historický kurz transakce.
 
 Výpočet nezahrnuje dividendy, hotovost na účtu, úroky, samostatné poplatky mimo Transactions ani daňové úpravy. Realizovaný zisk z prodané části otevřené pozice se samostatně nepočítá. Nejde o daňovou FIFO evidenci.
 
@@ -156,11 +177,11 @@ Jeden list `Portfolio` vychází z první verze `v4` dodané šablony: titul vle
 | Sloupec | Význam |
 | --- | --- |
 | A `ISIN`, B `Company` | Identifikátor a poslední známý název produktu. |
-| C `Ticker(s)` | Text doplněný přes `--tickers` nebo ručně, například burza a ticker. Zůstává editovatelný a nemá vliv na výpočty. |
+| C `Ticker(s)` | Text doplněný přes `--tickers` nebo ručně, například burza a ticker. V režimu `googlefinance` určuje aktuální ocenění; historické výpočty nemění. |
 | D `Quantity` | Aktuální počet kusů. |
 | E `Bought Price` | Vážená pořizovací cena dosud drženého kusu: `Cost Basis / Quantity`; při nulovém množství 0. |
 | F `Total Cost` | **Čistě vložené prostředky = celkové nákupy − příjmy z prodejů.** Může být záporný. Není to pořizovací hodnota zbývajících kusů. |
-| G `Current Price` | Ručně zadávaná nezáporná cena jednoho kusu **v EUR**, nikoliv USD ani GBX. |
+| G `Current Price` | Cena jednoho kusu **v EUR**: výchozí vzorec `Quote Price × Unit Factor × FX to EUR`; v režimu `manual` ruční nezáporná cena v EUR. |
 | H `Total Value` | `Quantity × Current Price`; uzavřená pozice má hodnotu 0 i bez ceny. |
 | I `Total Return %` | `Gain/Loss / Total Purchases`. Bez nákupních nákladů není procentní výnos definovaný. |
 | J `Gain/Loss` | Celkový výsledek obchodů včetně držených kusů: `Total Value + Total Sale Income − Total Purchases`. |
@@ -170,14 +191,19 @@ Jeden list `Portfolio` vychází z první verze `v4` dodané šablony: titul vle
 | P `Net Cash Flow` | Dosavadní peněžní stav: `Total Sale Income − Total Purchases`. |
 | Q `Cost Basis` | Pořizovací hodnota dosud držených kusů. |
 | R `Unrealised G/L` | Nerealizovaný výsledek držených kusů: `Total Value − Cost Basis`. |
+| S `Quote Price` | Pouze `googlefinance`: cena vrácená `GOOGLEFINANCE(ticker,"price")` v původní měně/jednotce kotace. |
+| T `Quote Currency` | Pouze `googlefinance`: měna vrácená atributem `"currency"`. |
+| U `Unit Factor` | Pouze `googlefinance`: `0.01` pro britské pence `GBX` nebo `GBp`, jinak `1`. |
+| V `FX to EUR` | Pouze `googlefinance`: kolik EUR odpovídá jednotce měny; pro EUR `1`, pro pence kurz GBP→EUR. |
+| W `Quote Time` | Pouze `googlefinance`: čas posledního obchodu z atributu `"tradetime"`. |
 
 Souhrny nahoře jsou navázané na tabulku vzorci. `Total Value`, celkový výsledek a alokace zůstanou `n.a.`, dokud není oceněná každá otevřená pozice. Nula je platná zadaná cena, ne chybějící vstup. Při nulové celkové tržní hodnotě není procentní alokace definovaná. Záporná nebo textová cena nevytvoří zdánlivě platné ocenění.
 
-Tickery a ceny mají světle žluté pozadí a modrý text. **Ceny se nestahují z internetu a samy se neaktualizují.** Pokud je původní cena v jiné měně, před vložením ji přepočti do EUR příslušným aktuálním kurzem. Datum u titulku označuje konec dodané historie transakcí, ne datum ručně doplněných cen. Každé nové spuštění vytváří nový report a nepřenáší ruční vstupy z dřívějšího XLSX; při `--force` se tyto údaje v přepisovaném výstupu ztratí.
+Ruční vstupy mají světle žluté pozadí a modrý text: sloupec C, v režimu `manual` také G. V tomto režimu se ceny nestahují ani neaktualizují; před vložením je přepočti do EUR. V režimu `googlefinance` se měna zjistí z kotace, pence se převedou na libry a pak do EUR. `GBp` se od `GBP` odlišuje funkcí [EXACT](https://support.google.com/docs/answer/3094073?hl=en), která rozlišuje velikost písmen; librová cena se proto omylem nevydělí stem. Každé nové spuštění vytváří nový report a nepřenáší ruční vstupy z dřívějšího XLSX; při `--force` se tyto údaje v přepisovaném výstupu ztratí.
 
-Oproti nefunkčním náhradním vzorcům `GOOGLEFINANCE` a `SPARKLINE` v šabloně používá výstup běžné excelové vzorce a nativní podmíněné formátování. Názvy produktů jsou explicitně uložené jako text, takže se nevyhodnotí jako vzorce. `Bought Price` není čistě vložená částka na kus; `Total Return %` používá historické nákupní náklady, nikoliv čistou investici, která může být nulová či záporná. Souhrnný `Total Gain/Loss` zahrnuje realizovanou i nerealizovanou část; samotná nerealizovaná část je ve sloupci R. Výnos nezahrnuje dividendy ani další pohyby mimo Transactions.
+Na rozdíl od náhradních obalů `__xludf.DUMMYFUNCTION` v šabloně obsahuje režim `googlefinance` přímé vzorce pro Google Sheets. Zbytek výpočtů používá běžné tabulkové funkce a nativní podmíněné formátování místo `SPARKLINE`. Režim `manual` neobsahuje žádné `GOOGLEFINANCE` a je použitelný v Excelu. Názvy produktů a předané tickery jsou explicitně uložené jako text, takže se nevyhodnotí jako vložené vzorce. `Bought Price` není čistě vložená částka na kus; `Total Return %` používá historické nákupní náklady, nikoliv čistou investici, která může být nulová či záporná. Souhrnný `Total Gain/Loss` zahrnuje realizovanou i nerealizovanou část; samotná nerealizovaná část je ve sloupci R. Výnos nezahrnuje dividendy ani další pohyby mimo Transactions.
 
-Při vytvoření XLSX se přesné historické částky převádějí na číselné buňky s nejvýše 15 platnými číslicemi. Další přepočty provádí Excel ve své číselné aritmetice. Měnové formáty zobrazují dvě desetinná místa, ale nezaokrouhlují uložené částky na centy. Množství, které by Excel změnil kvůli omezení přesnosti, se odmítne s doporučením použít CSV. Podporováno je nejvýše 1 048 571 pozic a 32 767 znaků na textovou buňku. Formát je standardní XLSX (SpreadsheetML v ZIP); skript nepotřebuje Excel, Python, systémový ZIP ani žádný npm balíček.
+Při vytvoření XLSX se přesné historické částky převádějí na číselné buňky s nejvýše 15 platnými číslicemi. Další přepočty provádí cílový tabulkový editor ve své číselné aritmetice. Měnové formáty zobrazují dvě desetinná místa, ale nezaokrouhlují uložené částky na centy. Množství, které by Excel změnil kvůli omezení přesnosti, se odmítne s doporučením použít CSV. Podporováno je nejvýše 1 048 571 pozic a 32 767 znaků na textovou buňku; při importu navíc platí vlastní limity Google Sheets. Formát je standardní XLSX (SpreadsheetML v ZIP); skript nepotřebuje Excel, Python, systémový ZIP ani žádný npm balíček.
 
 ### Původní CSV
 
@@ -235,7 +261,7 @@ npm test
 npm run test:coverage
 ```
 
-Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, celkové náklady, příjmy a jejich rozdíl, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, strukturu XLSX, vzorce a jejich rozsahy, formátování, ZIP kontrolní součty, mapování tickerů z CSV/JSON, neúplné a duplicitní mapy, chybné podklady i CLI. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
+Testy používají jen `node:test`, `node:assert` a další vestavěné moduly. Kontrolují přesnost výpočtů, celkové náklady, příjmy a jejich rozdíl, částečné prodeje, uzavření a znovuotevření, splity, přejmenování, dílčí plnění, desetinná množství, pořadí vstupu, CSV, strukturu XLSX, vzorce a jejich rozsahy, formátování, ZIP kontrolní součty, mapování tickerů z CSV/JSON, neúplné a duplicitní mapy, oba cenové režimy, vzorce pro převod do EUR a rozlišení GBp/GBP, chybné podklady i CLI. Nevolají cenovou službu a nedokládají dostupnost konkrétního tickeru; živé načtení ověř v Google Sheets. GitHub Actions spouští stejnou sadu na Node.js 24.21.0.
 
 ```text
 bin/degiro-portfolio.js   CLI a souborové operace
@@ -243,6 +269,7 @@ src/csv.js               Čtení a zápis CSV
 src/decimal.js           Přesná racionální aritmetika a formátování
 src/transactions.js      Validace a normalizace transakcí
 src/tickers.js           Čtení a validace explicitních mapování tickerů
+src/googlefinance.js     Čisté vytváření cenových a kurzových vzorců pro Google Sheets
 src/portfolio.js         Výpočet pozic a pořizovací hodnoty
 src/report.js            Formát výstupního portfolia
 src/xlsx.js              XLSX dashboard a excelové vzorce
@@ -276,11 +303,14 @@ const report = createPortfolioReport(transactionsCsv, {
   includeClosed: true,
   expectedQuantitiesCsv,
   tickerMappings,
+  priceSource: 'googlefinance',
 });
 await writeFile('portfolio.xlsx', report.xlsx, { flag: 'wx' });
 ```
 
 Všechny volby jsou nepovinné. `format` má kvůli kompatibilitě knihovního API výchozí hodnotu `'csv'`; pro XLSX nastav `'xlsx'`. Bez `expectedQuantitiesCsv` se porovnání s referencí vynechá; dodaný prázdný nebo neplatný referenční text vyvolá chybu. `includeClosed` má výchozí hodnotu `false` a funguje stejně jako volba CLI. Neplatná data nebo nesoulad s referencí vyvolají `Error`, který může volající aplikace zachytit.
+
+`priceSource` přijímá `'googlefinance'` (výchozí zdroj pro XLSX) nebo `'manual'`. Stejnou volbu přijímá `createPortfolioXlsx`. Výslovné zadání u `format: 'csv'` se odmítne. Ani v režimu `googlefinance` knihovna nestahuje tržní data: vrací XLSX s cenovými vzorci a uloženými neznámými výsledky `n.a.` (u uzavřených pozic je cena a hodnota 0). Výpočty se provedou až v Google Sheets.
 
 `tickerMappings` je nepovinné pole objektů `{ isin, ticker }`. Lze ho předat přímo nebo získat čistou funkcí `parseTickerMappings(text, { format: 'csv' | 'json' })`; výchozí formát je CSV. Stejnou volbu přijímají také `createPortfolioCsv` a `createPortfolioXlsx`. Nepředaná mapa zachovává původní CSV formát; i explicitně prázdné pole přidá sloupec `Ticker`. Neplatné nebo duplicitní mapování vyvolá chybu před vytvořením výstupu. Žádná z těchto funkcí neprovádí síťové požadavky ani nemění dodaná data.
 

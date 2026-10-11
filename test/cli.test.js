@@ -19,7 +19,7 @@ const run = (args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'u
 test('CLI exposes help, version and argument errors without writing files', () => {
   assert.equal(run(['--help']).status, 0);
   assert.match(run(['--help']).stdout, /Použití/u);
-  assert.equal(run(['--version']).stdout.trim(), '1.5.0');
+  assert.equal(run(['--version']).stdout.trim(), '1.6.0');
   assert.equal(run([]).status, 1);
   assert.equal(run(['--unknown']).status, 1);
 });
@@ -84,6 +84,7 @@ test('CLI selects XLSX by extension and rejects unsupported output formats witho
   const args = ['-i', input, '-o', output, '--verify', reference];
   const result = run(args);
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /Google Sheets.*GOOGLEFINANCE/u);
   const workbook = await readFile(output);
   assert.equal(workbook.readUInt32LE(0), 0x04034b50);
   assert.equal(run(args).status, 1);
@@ -93,6 +94,30 @@ test('CLI selects XLSX by extension and rejects unsupported output formats witho
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /format must be csv or xlsx/u);
   await assert.rejects(readFile(unsupported), { code: 'ENOENT' });
+});
+
+test('CLI supports manual EUR prices and rejects invalid pricing before overwriting output', async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), 'degiro-pricing-test-'));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const output = join(directory, 'manual.xlsx');
+  const args = ['-i', input, '-o', output, '--price-source', 'manual'];
+  const result = run(args);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /aktuální ceny v EUR/u);
+  assert.doesNotMatch(result.stderr, /GOOGLEFINANCE/u);
+  const original = await readFile(output);
+  assert.doesNotMatch(readZipParts(original).get('xl/worksheets/sheet1.xml'), /GOOGLEFINANCE/u);
+  for (const priceSource of ['unknown', '']) {
+    const invalid = run(['-i', input, '-o', output, '--price-source', priceSource, '--force']);
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /Price source must be/u);
+    assert.deepEqual(await readFile(output), original);
+  }
+  const csvOutput = join(directory, 'portfolio.csv');
+  const invalid = run(['-i', input, '-o', csvOutput, '--price-source', 'googlefinance']);
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /only available for XLSX/u);
+  await assert.rejects(readFile(csvOutput), { code: 'ENOENT' });
 });
 
 test('CLI verifies before writing, requires explicit overwrite, and protects inputs and aliases', async (context) => {

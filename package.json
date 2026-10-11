@@ -1,7 +1,7 @@
 {
   "name": "degiro-portfolio",
-  "version": "1.5.0",
-  "description": "Dependency-free DEGIRO portfolio reports with EUR cost basis, lifetime cash flows and explicit ticker mappings.",
+  "version": "1.6.0",
+  "description": "Dependency-free DEGIRO portfolio reports with EUR cash flows, ticker mappings and Google Sheets market-price formulas.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

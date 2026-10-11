@@ -10,10 +10,10 @@ test('XLSX report preserves CSV API and emits the dashboard layout with typed da
   const csv = await readFile(new URL('../examples/transactions.csv', import.meta.url), 'utf8');
   const baseline = createPortfolioReport(csv);
   assert.equal(baseline.xlsx, null);
-  const report = createPortfolioReport(csv, { format: 'xlsx' });
+  const report = createPortfolioReport(csv, { format: 'xlsx', priceSource: 'manual' });
   assert.equal(report.csv, baseline.csv);
   assert.deepEqual(report.portfolio, baseline.portfolio);
-  assert.deepEqual(report.xlsx, createPortfolioXlsx(report.portfolio));
+  assert.deepEqual(report.xlsx, createPortfolioXlsx(report.portfolio, { priceSource: 'manual' }));
   const parts = readZipParts(report.xlsx);
   assert.equal(parts.size, 6);
   assert.match(parts.get('[Content_Types].xml'), /spreadsheetml.sheet.main\+xml/u);

@@ -12,6 +12,7 @@ Volby:
   -o, --output <soubor>    Výstupní XLSX dashboard (.xlsx), případně původní CSV (.csv).
       --verify <soubor>   Ověření počtů proti CSV se sloupci Product,Quantity.
       --tickers <soubor>  Převodní CSV (ISIN,Ticker) nebo JSON s vybranými tickery.
+      --price-source <zdroj>  googlefinance (výchozí) nebo manual; pouze XLSX.
       --include-closed    Zahrnout i nulové pozice bez peněžních toků (podle ISIN).
       --force             Povolit přepsání existujícího výstupu.
   -h, --help              Zobrazit nápovědu.
@@ -21,7 +22,8 @@ Pořizovací hodnota používá vážený průměr a Total EUR včetně poplatk�
 Celkové náklady a příjmy zahrnují skutečné obchody za celou historii ISIN.
 Výsledný peněžní stav je příjem z prodejů po poplatcích minus náklady nákupů.
 Uzavřené pozice s nenulovými náklady nebo příjmy se zahrnují automaticky.
-XLSX má editovatelné tickery a aktuální ceny v EUR; hodnoty dopočítají vzorce.
+XLSX načítá ceny a kurzy přes GOOGLEFINANCE až po převodu do Google Sheets.
+Pro Excel použij --price-source manual a doplň aktuální ceny v EUR ručně.
 Total Cost v XLSX znamená celkové nákupy minus příjmy z prodejů.
 Chybějící ocenění se zobrazí jako n.a. Vstup musí zahrnovat celou historii.
 `;
@@ -56,6 +58,7 @@ async function main() {
       output: { type: 'string', short: 'o' },
       verify: { type: 'string' },
       tickers: { type: 'string' },
+      'price-source': { type: 'string' },
       'include-closed': { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
@@ -86,6 +89,7 @@ async function main() {
     includeClosed: values['include-closed'],
     expectedQuantitiesCsv,
     tickerMappings,
+    priceSource: /** @type {import('../src/googlefinance.js').PriceSource | undefined} */ (values['price-source']),
   });
   if (report.verification) {
     const verified = report.verification;
@@ -97,7 +101,9 @@ async function main() {
     process.stderr.write(`Tickery: ${mappedPositionCount} vyplněných pozic; bez mapování: ${unmappedIsins.length}.\n`);
     if (unmappedIsins.length) process.stderr.write(`Chybějící tickery (ISIN): ${unmappedIsins.join(', ')}.\n`);
   }
-  if (report.xlsx) process.stderr.write('V XLSX doplň chybějící tickery a aktuální ceny v EUR; tržní hodnoty dopočítají vzorce.\n');
+  if (report.xlsx) process.stderr.write(values['price-source'] === 'manual'
+    ? 'V XLSX doplň chybějící tickery a aktuální ceny v EUR; tržní hodnoty dopočítají vzorce.\n'
+    : 'Převeď XLSX do Google Sheets a doplň chybějící tickery ve sloupci C; GOOGLEFINANCE načte ceny a kurzy do EUR. V Excelu tento zdroj nefunguje.\n');
   process.stderr.write(`Zapsáno: ${values.output}; otevřené pozice: ${report.openPositionCount}; stav k ${report.portfolio.asOf}; administrativní převody: ${report.portfolio.corporateActionCount}.\n`);
 }
 
